@@ -1,0 +1,219 @@
+/* ACADEMIC THEME - Traditional serif typography for papers and formal documents */
+
+@page {
+  size: Letter;
+  margin: 25mm 25mm 30mm 25mm;
+
+  @bottom-center {
+    content: counter(page);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 9pt;
+    color: #666;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Georgia', 'Times New Roman', 'Cambria', serif;
+  font-size: 11pt;
+  line-height: 1.75;
+  color: #1a1a1a;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* Headings */
+h1 {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 20pt;
+  font-weight: normal;
+  color: #000;
+  margin: 0 0 8px 0;
+  padding: 0;
+  text-align: center;
+  border: none;
+}
+
+h1 + p, h1 + hr {
+  margin-top: 24px;
+}
+
+h2 {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 14pt;
+  font-weight: bold;
+  color: #000;
+  margin: 28px 0 12px 0;
+  padding: 0;
+  text-align: left;
+}
+
+h3 {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 12pt;
+  font-weight: bold;
+  font-style: italic;
+  color: #222;
+  margin: 22px 0 10px 0;
+}
+
+h4 {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 11pt;
+  font-weight: bold;
+  color: #333;
+  margin: 18px 0 8px 0;
+}
+
+/* Paragraphs */
+p {
+  margin: 0 0 12px 0;
+  text-indent: 0;
+  orphans: 3;
+  widows: 3;
+}
+
+/* First paragraph after heading - no indent */
+h1 + p, h2 + p, h3 + p, h4 + p {
+  text-indent: 0;
+}
+
+/* Strong emphasis */
+strong {
+  font-weight: bold;
+}
+
+em {
+  font-style: italic;
+}
+
+/* Code blocks */
+pre {
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 8pt;
+  line-height: 1.35;
+  background-color: #fafafa;
+  border: 1px solid #ccc;
+  border-radius: 0;
+  padding: 12px 14px;
+  margin: 18px 0;
+  overflow-x: visible;
+  white-space: pre;
+  word-wrap: normal;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  text-align: left;
+}
+
+code {
+  font-family: 'Courier New', 'Courier', monospace;
+  font-size: 9pt;
+  background-color: #f0f0f0;
+  padding: 1px 4px;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 10pt;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+caption {
+  font-style: italic;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+th {
+  font-weight: bold;
+  padding: 8px 10px;
+  text-align: left;
+  border-top: 2px solid #000;
+  border-bottom: 1px solid #000;
+}
+
+td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ddd;
+  vertical-align: top;
+}
+
+tbody tr:last-child td {
+  border-bottom: 2px solid #000;
+}
+
+/* Lists */
+ul, ol {
+  margin: 14px 0;
+  padding-left: 28px;
+}
+
+li {
+  margin: 6px 0;
+  line-height: 1.65;
+}
+
+/* Horizontal rules */
+hr {
+  border: none;
+  border-top: 1px solid #999;
+  margin: 30px 40px;
+}
+
+/* Blockquotes */
+blockquote {
+  margin: 20px 30px;
+  padding: 0;
+  border: none;
+  font-size: 10pt;
+  line-height: 1.65;
+}
+
+blockquote p {
+  margin: 0 0 8px 0;
+}
+
+/* Links */
+a {
+  color: #000;
+  text-decoration: underline;
+}
+
+/* Page break control */
+h1, h2, h3 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 20px auto;
+}
+
+/* Figure captions */
+img + em, figure figcaption {
+  display: block;
+  text-align: center;
+  font-size: 9pt;
+  color: #666;
+  margin-top: 8px;
+}

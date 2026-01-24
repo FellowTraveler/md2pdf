@@ -1,0 +1,198 @@
+/* MINIMAL THEME - Clean, sparse design with maximum whitespace */
+
+@page {
+  size: Letter;
+  margin: 25mm 22mm 30mm 22mm;
+
+  @bottom-center {
+    content: counter(page);
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: #999;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.7;
+  color: #222;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  font-weight: 300;
+}
+
+/* Headings - lightweight */
+h1 {
+  font-size: 22pt;
+  font-weight: 400;
+  color: #000;
+  margin: 0 0 30px 0;
+  padding: 0;
+  border: none;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 14pt;
+  font-weight: 500;
+  color: #000;
+  margin: 40px 0 16px 0;
+  padding: 0;
+  border: none;
+}
+
+h3 {
+  font-size: 11pt;
+  font-weight: 500;
+  color: #333;
+  margin: 28px 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+h4 {
+  font-size: 10.5pt;
+  font-weight: 500;
+  color: #444;
+  margin: 20px 0 8px 0;
+}
+
+/* Paragraphs */
+p {
+  margin: 0 0 16px 0;
+  orphans: 3;
+  widows: 3;
+}
+
+/* Strong emphasis */
+strong {
+  font-weight: 500;
+  color: #000;
+}
+
+/* Code blocks */
+pre {
+  font-family: 'Menlo', 'SF Mono', 'Monaco', monospace;
+  font-size: 8pt;
+  line-height: 1.4;
+  background-color: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 0;
+  padding: 16px 18px;
+  margin: 20px 0;
+  overflow-x: visible;
+  white-space: pre;
+  word-wrap: normal;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+code {
+  font-family: 'Menlo', 'SF Mono', 'Monaco', monospace;
+  font-size: 8.5pt;
+  background-color: #f5f5f5;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Tables - minimal borders */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 24px 0;
+  font-size: 9.5pt;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+th {
+  font-weight: 500;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 2px solid #000;
+  color: #000;
+}
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+tbody tr:last-child td {
+  border-bottom: 1px solid #ccc;
+}
+
+/* Lists */
+ul, ol {
+  margin: 16px 0;
+  padding-left: 20px;
+}
+
+li {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+ul {
+  list-style-type: none;
+}
+
+ul > li::before {
+  content: "—";
+  margin-right: 8px;
+  color: #999;
+}
+
+/* Horizontal rules */
+hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 40px 0;
+}
+
+/* Blockquotes */
+blockquote {
+  margin: 24px 0;
+  padding: 0 0 0 20px;
+  border-left: 2px solid #ddd;
+  color: #666;
+  font-style: italic;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* Links */
+a {
+  color: #000;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Page break control */
+h1, h2, h3 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+/* Images */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 24px auto;
+}
