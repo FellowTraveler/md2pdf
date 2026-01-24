@@ -91,6 +91,13 @@ Run `md2pdf --list` for detailed theme descriptions.
 
 Add your own CSS files to `~/.md2pdf-themes/` and they'll appear in the theme list.
 
+## Author
+
+- Chris Odom - [GitHub](https://github.com/fellowtraveler)
+- Contact: [chris@texasfortress.ai](mailto:chris@texasfortress.ai)
+- [Become a sponsor for Chris](https://github.com/sponsors/fellowtraveler)
+- [![Tip Chris in Crypto](https://tip.md/badge.svg)](https://tip.md/FellowTraveler)
+
 ## License
 
 MIT
