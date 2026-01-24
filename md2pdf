@@ -31,13 +31,17 @@ show_help() {
     echo "    md2pdf --list                List available themes"
     echo "    md2pdf --help                Show this help"
     echo ""
+    echo -e "${BOLD}OUTPUT:${NC}"
+    echo "    Creates a PDF file with the same name as the input file."
+    echo "    Example: README.md -> README.pdf"
+    echo ""
     echo -e "${BOLD}THEMES:${NC}"
     list_themes_brief
     echo ""
     echo -e "${BOLD}EXAMPLES:${NC}"
-    echo "    md2pdf README.md             # Uses default theme (executive)"
-    echo "    md2pdf README.md minimal     # Uses minimal theme"
-    echo "    md2pdf docs/guide.md modern  # Convert with modern theme"
+    echo "    md2pdf README.md             # -> README.pdf (default: executive)"
+    echo "    md2pdf README.md minimal     # -> README.pdf (minimal theme)"
+    echo "    md2pdf docs/guide.md modern  # -> docs/guide.pdf (modern theme)"
     echo ""
 }
 
