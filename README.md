@@ -25,8 +25,31 @@ If `~/bin` is not in your PATH, the installer will show you how to add it.
 
 ## Usage
 
-```bash
-md2pdf <file.md> [theme]
+```
+md2pdf - Convert Markdown to beautiful PDFs
+
+USAGE:
+    md2pdf <file.md> [theme]     Convert markdown to PDF
+    md2pdf --list                List available themes
+    md2pdf --help                Show this help
+
+OUTPUT:
+    Creates a PDF file with the same name as the input file.
+    Example: README.md -> README.pdf
+
+THEMES:
+    academic
+    claude
+    dark
+    executive
+    github
+    minimal
+    modern
+
+EXAMPLES:
+    md2pdf README.md             # -> README.pdf (default: executive)
+    md2pdf README.md minimal     # -> README.pdf (minimal theme)
+    md2pdf docs/guide.md modern  # -> docs/guide.pdf (modern theme)
 ```
 
 ### Output
