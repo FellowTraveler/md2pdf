@@ -26,10 +26,13 @@ if ! command -v node &> /dev/null; then
     echo ""
 fi
 
-# Check for pdftotext (required for pdf2md)
-if ! command -v pdftotext &> /dev/null; then
-    echo -e "${YELLOW}Warning: pdftotext not found. pdf2md requires poppler to run.${NC}"
-    echo "Install poppler: brew install poppler"
+# Check for Python 3 and pymupdf4llm (required for pdf2md)
+if ! command -v python3 &> /dev/null; then
+    echo -e "${YELLOW}Warning: Python 3 not found. pdf2md requires Python 3 to run.${NC}"
+    echo ""
+elif ! python3 -c "import pymupdf4llm" 2>/dev/null; then
+    echo -e "${YELLOW}Warning: pymupdf4llm not found. Installing...${NC}"
+    pip3 install pymupdf4llm
     echo ""
 fi
 

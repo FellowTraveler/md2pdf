@@ -5,7 +5,7 @@
 # Usage: pdf2md <file.pdf>
 #        pdf2md --help
 #
-# Requires: pdftotext (from poppler)
+# Requires: Python 3 with pymupdf4llm
 #
 
 set -e
@@ -30,8 +30,8 @@ show_help() {
     echo "    Example: README.pdf -> README.md"
     echo ""
     echo -e "${BOLD}REQUIRES:${NC}"
-    echo "    pdftotext (from poppler)"
-    echo "    Install: brew install poppler"
+    echo "    Python 3 with pymupdf4llm"
+    echo "    Install: pip3 install pymupdf4llm"
     echo ""
 }
 
@@ -41,10 +41,16 @@ if [[ $# -eq 0 ]] || [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     exit 0
 fi
 
-# Check for pdftotext
-if ! command -v pdftotext &> /dev/null; then
-    echo -e "${RED}Error: pdftotext not found.${NC}"
-    echo "Install poppler: brew install poppler"
+# Check for Python 3
+if ! command -v python3 &> /dev/null; then
+    echo -e "${RED}Error: Python 3 not found.${NC}"
+    exit 1
+fi
+
+# Check for pymupdf4llm
+if ! python3 -c "import pymupdf4llm" 2>/dev/null; then
+    echo -e "${RED}Error: pymupdf4llm not found.${NC}"
+    echo "Install: pip3 install pymupdf4llm"
     exit 1
 fi
 
@@ -69,8 +75,19 @@ echo -e "${BLUE}Converting:${NC} $INPUT_FILE"
 echo -e "${BLUE}Output:${NC}     $OUTPUT_FILE"
 echo ""
 
-# Convert PDF to text, preserving layout
-pdftotext -layout "$INPUT_FILE" "$OUTPUT_FILE"
+# Convert PDF to markdown using pymupdf4llm
+python3 - "$INPUT_FILE" "$OUTPUT_FILE" << 'PYEOF'
+import sys
+import pymupdf4llm
+
+input_file = sys.argv[1]
+output_file = sys.argv[2]
+
+md = pymupdf4llm.to_markdown(input_file)
+
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write(md)
+PYEOF
 
 if [[ -f "$OUTPUT_FILE" ]]; then
     echo -e "${GREEN}✓ Markdown created successfully: $OUTPUT_FILE${NC}"
