@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# md2pdf installer
+# md2pdf & pdf2md installer
 #
 
 set -e
@@ -16,7 +16,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-echo -e "${BOLD}md2pdf Installer${NC}"
+echo -e "${BOLD}md2pdf & pdf2md Installer${NC}"
 echo ""
 
 # Check for Node.js (required for md-to-pdf)
@@ -26,16 +26,27 @@ if ! command -v node &> /dev/null; then
     echo ""
 fi
 
+# Check for pdftotext (required for pdf2md)
+if ! command -v pdftotext &> /dev/null; then
+    echo -e "${YELLOW}Warning: pdftotext not found. pdf2md requires poppler to run.${NC}"
+    echo "Install poppler: brew install poppler"
+    echo ""
+fi
+
 # Create bin directory if needed
 if [[ ! -d "$INSTALL_BIN" ]]; then
     echo -e "${BLUE}Creating:${NC} $INSTALL_BIN"
     mkdir -p "$INSTALL_BIN"
 fi
 
-# Install script
+# Install scripts
 echo -e "${BLUE}Installing:${NC} md2pdf -> $INSTALL_BIN/md2pdf"
 cp "$SCRIPT_DIR/md2pdf" "$INSTALL_BIN/md2pdf"
 chmod +x "$INSTALL_BIN/md2pdf"
+
+echo -e "${BLUE}Installing:${NC} pdf2md -> $INSTALL_BIN/pdf2md"
+cp "$SCRIPT_DIR/pdf2md" "$INSTALL_BIN/pdf2md"
+chmod +x "$INSTALL_BIN/pdf2md"
 
 # Install themes
 echo -e "${BLUE}Installing:${NC} themes -> $THEME_DIR/"
@@ -55,4 +66,4 @@ if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
     echo ""
 fi
 
-echo "Run 'md2pdf --help' to get started."
+echo "Run 'md2pdf --help' or 'pdf2md --help' to get started."
