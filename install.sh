@@ -36,6 +36,15 @@ elif ! python3 -c "import pymupdf4llm" 2>/dev/null; then
     echo ""
 fi
 
+# Check for anthropic package (optional, for AI cleanup of OCR output)
+if command -v python3 &> /dev/null; then
+    if ! python3 -c "import anthropic" 2>/dev/null; then
+        echo -e "${YELLOW}Installing anthropic (for AI cleanup of OCR output)...${NC}"
+        pip3 install anthropic
+        echo ""
+    fi
+fi
+
 # Create bin directory if needed
 if [[ ! -d "$INSTALL_BIN" ]]; then
     echo -e "${BLUE}Creating:${NC} $INSTALL_BIN"

@@ -6,6 +6,7 @@
 #        pdf2md --help
 #
 # Requires: Python 3 with pymupdf4llm
+#           For image-based PDFs: tesseract, pytesseract, Pillow
 #
 
 set -e
@@ -32,6 +33,14 @@ show_help() {
     echo -e "${BOLD}REQUIRES:${NC}"
     echo "    Python 3 with pymupdf4llm"
     echo "    Install: pip3 install pymupdf4llm"
+    echo ""
+    echo -e "${BOLD}OCR SUPPORT (for image-based PDFs):${NC}"
+    echo "    tesseract, pytesseract, Pillow"
+    echo "    Install: brew install tesseract && pip3 install pytesseract Pillow"
+    echo ""
+    echo -e "${BOLD}AI CLEANUP (optional, for OCR output):${NC}"
+    echo "    Set ANTHROPIC_API_KEY to clean up messy OCR with Claude Haiku."
+    echo "    Install: pip3 install anthropic"
     echo ""
 }
 
@@ -75,7 +84,8 @@ echo -e "${BLUE}Converting:${NC} $INPUT_FILE"
 echo -e "${BLUE}Output:${NC}     $OUTPUT_FILE"
 echo ""
 
-# Convert PDF to markdown using pymupdf4llm
+# Convert PDF to markdown using pymupdf4llm, with OCR fallback for image-based PDFs
+OCR_USED=""
 python3 - "$INPUT_FILE" "$OUTPUT_FILE" << 'PYEOF'
 import sys
 import pymupdf4llm
@@ -85,12 +95,106 @@ output_file = sys.argv[2]
 
 md = pymupdf4llm.to_markdown(input_file)
 
+# If text extraction found content, write it and exit
+if md.strip():
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(md)
+    sys.exit(0)
+
+# No text found — try OCR fallback
+print("No text found in PDF, attempting OCR...", file=sys.stderr)
+try:
+    import pymupdf
+    import pytesseract
+    from PIL import Image
+    import io
+except ImportError as e:
+    print(f"OCR dependencies not available: {e}", file=sys.stderr)
+    print("Install: brew install tesseract && pip3 install pytesseract Pillow", file=sys.stderr)
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write("")
+    sys.exit(0)
+
+doc = pymupdf.open(input_file)
+pages = []
+for i, page in enumerate(doc):
+    pix = page.get_pixmap(dpi=300)
+    img = Image.open(io.BytesIO(pix.tobytes("png")))
+    text = pytesseract.image_to_string(img)
+    if text.strip():
+        pages.append(text.strip())
+    print(f"  OCR page {i + 1}/{len(doc)}", file=sys.stderr)
+doc.close()
+
+md = "\n\n---\n\n".join(pages)
 with open(output_file, "w", encoding="utf-8") as f:
     f.write(md)
+
+# Signal to the shell that OCR was used
+with open("/tmp/pdf2md-ocr-used", "w") as f:
+    f.write("1")
 PYEOF
 
-if [[ -f "$OUTPUT_FILE" ]]; then
+# Check if OCR was used for the status message
+if [[ -f "/tmp/pdf2md-ocr-used" ]]; then
+    OCR_USED="yes"
+    rm -f "/tmp/pdf2md-ocr-used"
+fi
+
+# LLM cleanup for OCR output
+if [[ -n "$OCR_USED" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
+    echo -e "${BLUE}Cleaning up OCR output with LLM...${NC}"
+    python3 - "$OUTPUT_FILE" << 'CLEANUP_PYEOF'
+try:
+    import anthropic
+except ImportError:
+    import sys
+    print("anthropic package not installed, skipping LLM cleanup", file=sys.stderr)
+    print("Install: pip3 install anthropic", file=sys.stderr)
+    sys.exit(0)
+
+import sys
+
+output_file = sys.argv[1]
+
+with open(output_file, "r", encoding="utf-8") as f:
+    raw_md = f.read()
+
+if not raw_md.strip():
+    sys.exit(0)
+
+client = anthropic.Anthropic()
+message = client.messages.create(
+    model="claude-haiku-4-5-20251001",
+    max_tokens=8192,
+    messages=[{"role": "user", "content": f"""Clean up this OCR-extracted markdown. Rules:
+1. Remove duplicate content from overlapping page captures
+2. Fix OCR artifacts and garbled text
+3. Restore markdown formatting (headers, bold, italic, bullets, tables, code blocks)
+4. Remove UI chrome artifacts (Show more/less buttons, spinners, footers, navigation)
+5. Format chat transcripts with clear speaker labels if applicable
+6. Preserve ALL factual content — do not add or remove information
+7. Output ONLY the cleaned markdown, no preamble or explanation
+
+---
+{raw_md}"""}],
+)
+
+cleaned = message.content[0].text
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write(cleaned)
+CLEANUP_PYEOF
+    echo -e "  ${GREEN}LLM cleanup complete${NC}"
+elif [[ -n "$OCR_USED" ]] && [[ -z "$ANTHROPIC_API_KEY" ]]; then
+    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY to enable AI cleanup of OCR output${NC}"
+fi
+
+if [[ -f "$OUTPUT_FILE" ]] && [[ -s "$OUTPUT_FILE" ]]; then
     echo -e "${GREEN}✓ Markdown created successfully: $OUTPUT_FILE${NC}"
+
+    if [[ -n "$OCR_USED" ]]; then
+        echo -e "  ${YELLOW}(used OCR — image-based PDF detected)${NC}"
+    fi
 
     # Show file info
     SIZE=$(ls -lh "$OUTPUT_FILE" | awk '{print $5}')
