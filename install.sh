@@ -65,6 +65,17 @@ echo -e "${BLUE}Installing:${NC} themes -> $THEME_DIR/"
 mkdir -p "$THEME_DIR"
 cp "$SCRIPT_DIR/themes/"*.css "$THEME_DIR/"
 
+# Install Finder Quick Actions
+SERVICES_DIR="${HOME}/Library/Services"
+mkdir -p "$SERVICES_DIR"
+for workflow in "$SCRIPT_DIR/"*.workflow; do
+    if [[ -d "$workflow" ]]; then
+        name="$(basename "$workflow")"
+        echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
+        cp -R "$workflow" "$SERVICES_DIR/$name"
+    fi
+done
+
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"
 echo ""
