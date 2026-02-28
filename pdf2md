@@ -144,7 +144,8 @@ fi
 # LLM cleanup for OCR output
 if [[ -n "$OCR_USED" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
     echo -e "${BLUE}Cleaning up OCR output with LLM...${NC}"
-    python3 - "$OUTPUT_FILE" << 'CLEANUP_PYEOF'
+    CLEANUP_TMP="${OUTPUT_FILE}.cleanup.tmp"
+    python3 - "$OUTPUT_FILE" "$CLEANUP_TMP" << 'CLEANUP_PYEOF' || true
 try:
     import anthropic
 except ImportError:
@@ -156,6 +157,7 @@ except ImportError:
 import sys
 
 output_file = sys.argv[1]
+cleanup_tmp = sys.argv[2]
 
 with open(output_file, "r", encoding="utf-8") as f:
     raw_md = f.read()
@@ -181,10 +183,16 @@ message = client.messages.create(
 )
 
 cleaned = message.content[0].text
-with open(output_file, "w", encoding="utf-8") as f:
+with open(cleanup_tmp, "w", encoding="utf-8") as f:
     f.write(cleaned)
 CLEANUP_PYEOF
-    echo -e "  ${GREEN}LLM cleanup complete${NC}"
+    if [[ -f "$CLEANUP_TMP" ]] && [[ -s "$CLEANUP_TMP" ]]; then
+        mv "$CLEANUP_TMP" "$OUTPUT_FILE"
+        echo -e "  ${GREEN}LLM cleanup complete${NC}"
+    else
+        rm -f "$CLEANUP_TMP"
+        echo -e "  ${YELLOW}LLM cleanup failed, keeping raw OCR output${NC}"
+    fi
 elif [[ -n "$OCR_USED" ]] && [[ -z "$ANTHROPIC_API_KEY" ]]; then
     echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY to enable AI cleanup of OCR output${NC}"
 fi
