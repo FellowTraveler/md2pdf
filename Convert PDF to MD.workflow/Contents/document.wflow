@@ -59,7 +59,7 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>source "$HOME/.zshrc" 2&gt;/dev/null
+					<string>source "$HOME/.zshenv" 2&gt;/dev/null
 export PATH="$HOME/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 for f in "$@"; do
