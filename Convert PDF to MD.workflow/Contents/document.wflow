@@ -59,7 +59,8 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>export PATH="$HOME/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+					<string>source "$HOME/.zshrc" 2&gt;/dev/null
+export PATH="$HOME/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 for f in "$@"; do
     if [[ "$f" == *.pdf ]]; then
