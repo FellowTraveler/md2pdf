@@ -129,12 +129,23 @@ pdf2md scanned-doc.pdf           # OCR + optional AI cleanup
 
 ### AI Cleanup for OCR
 
-OCR output from scanned PDFs is often messy (duplicated content, garbled text, lost formatting). Setting `ANTHROPIC_API_KEY` enables automatic cleanup via Claude Haiku:
+OCR output from scanned PDFs is often messy (duplicated content, garbled text, lost formatting). Setting `ANTHROPIC_API_KEY` enables automatic cleanup via Claude Haiku.
+
+**Option 1: Environment variable** (works from terminal)
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-pdf2md scanned-doc.pdf           # OCR output is automatically cleaned up
+pdf2md scanned-doc.pdf
 ```
+
+**Option 2: Config file** (works everywhere, including Finder Quick Actions)
+
+```bash
+mkdir -p ~/.config/pdf2md
+echo 'export ANTHROPIC_API_KEY="sk-ant-..."' > ~/.config/pdf2md/env
+```
+
+Both methods work. The config file is recommended because it also works when pdf2md is invoked from Finder Quick Actions, which don't have access to your shell environment variables.
 
 Without the API key, pdf2md still works — you just get the raw OCR output with a tip about enabling cleanup.
 

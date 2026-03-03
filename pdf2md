@@ -39,7 +39,8 @@ show_help() {
     echo "    Install: brew install tesseract && pip3 install pytesseract Pillow"
     echo ""
     echo -e "${BOLD}AI CLEANUP (optional, for OCR output):${NC}"
-    echo "    Set ANTHROPIC_API_KEY to clean up messy OCR with Claude Haiku."
+    echo "    Set ANTHROPIC_API_KEY in your environment, or add it to:"
+    echo "      ~/.config/pdf2md/env"
     echo "    Install: pip3 install anthropic"
     echo ""
 }
@@ -141,6 +142,11 @@ if [[ -f "/tmp/pdf2md-ocr-used" ]]; then
     rm -f "/tmp/pdf2md-ocr-used"
 fi
 
+# Load API key from config file if not already set
+if [[ -z "$ANTHROPIC_API_KEY" ]] && [[ -f "$HOME/.config/pdf2md/env" ]]; then
+    source "$HOME/.config/pdf2md/env"
+fi
+
 # LLM cleanup for OCR output
 if [[ -n "$OCR_USED" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
     echo -e "${BLUE}Cleaning up OCR output with LLM...${NC}"
@@ -198,7 +204,7 @@ CLEANUP_PYEOF
         echo -e "  ${YELLOW}LLM cleanup failed, keeping raw OCR output${NC}"
     fi
 elif [[ -n "$OCR_USED" ]] && [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY to enable AI cleanup of OCR output${NC}"
+    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY or add it to ~/.config/pdf2md/env${NC}"
 fi
 
 if [[ -f "$OUTPUT_FILE" ]] && [[ -s "$OUTPUT_FILE" ]]; then
