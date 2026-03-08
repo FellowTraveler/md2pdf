@@ -61,8 +61,23 @@
 					<key>COMMAND_STRING</key>
 					<string>for f in "$@"
 do
-    cat "$f"
-done | pbcopy</string>
+    mime=$(file -b --mime-type "$f")
+    if [[ "$mime" == image/* ]]; then
+        osascript \
+          -e 'use framework "AppKit"' \
+          -e 'use scripting additions' \
+          -e 'on run argv' \
+          -e 'set filePath to item 1 of argv' \
+          -e "set img to current application's NSImage's alloc()'s initWithContentsOfFile:filePath" \
+          -e "set pb to current application's NSPasteboard's generalPasteboard()" \
+          -e "pb's clearContents()" \
+          -e "pb's writeObjects:{img}" \
+          -e 'end run' \
+          -- "$f"
+    else
+        cat "$f" | pbcopy
+    fi
+done</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
