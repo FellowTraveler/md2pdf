@@ -72,6 +72,7 @@ for workflow in "$SCRIPT_DIR/"*.workflow; do
     if [[ -d "$workflow" ]]; then
         name="$(basename "$workflow")"
         echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
+        rm -rf "$SERVICES_DIR/$name"
         cp -R "$workflow" "$SERVICES_DIR/$name"
     fi
 done
