@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.apple.automator.open-with-fork</string>
+	<string>com.apple.automator.open-folder-with-fork</string>
 	<key>CFBundleName</key>
-	<string>Open with Fork</string>
+	<string>Open Folder with Fork</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSServices</key>
@@ -14,12 +14,12 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Open with Fork</string>
+				<string>Open Folder with Fork</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>runWorkflowAsService</string>
 			<key>NSPortName</key>
-			<string>Open with Fork</string>
+			<string>Open Folder with Fork</string>
 			<key>NSRequiredContext</key>
 			<dict>
 				<key>NSApplicationIdentifier</key>
@@ -33,7 +33,6 @@
 	</array>
 	<key>ShortcutInputClasses</key>
 	<array>
-		<string>WFGenericFileContentItem</string>
 		<string>WFFolderContentItem</string>
 	</array>
 </dict>

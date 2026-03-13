@@ -34,6 +34,7 @@
 	<key>ShortcutInputClasses</key>
 	<array>
 		<string>WFGenericFileContentItem</string>
+		<string>WFFolderContentItem</string>
 	</array>
 </dict>
 </plist>

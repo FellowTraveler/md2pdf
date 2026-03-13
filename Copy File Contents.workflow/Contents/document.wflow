@@ -80,6 +80,14 @@ do
               -e 'end run' \
               -- "$f"
             ;;
+        pdf|doc|docx|xls|xlsx|ppt|pptx|zip|gz|tar|dmg|app|bin|exe)
+            osascript \
+              -e 'on run argv' \
+              -e 'set theFile to POSIX file (item 1 of argv)' \
+              -e 'tell application "Finder" to set the clipboard to (theFile as alias)' \
+              -e 'end run' \
+              -- "$f"
+            ;;
         *)
             cat "$f" | pbcopy
             ;;

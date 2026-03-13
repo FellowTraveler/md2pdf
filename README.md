@@ -164,14 +164,14 @@ The installer adds right-click context menu actions for macOS Finder:
 
 - **Convert MD to PDF** — Right-click any `.md` file to convert it to PDF
 - **Convert PDF to MD** — Right-click any `.pdf` file to convert it to Markdown
-- **Copy File Contents** — Copy a file's contents to the clipboard (supports images)
+- **Copy File Contents** — Copy a file's contents to the clipboard (text files as text, images as images, PDFs/binaries as file references)
 - **Copy Path** — Copy the full path of any file or folder
-- **New Text File Here...** — Create a new text file in the current folder
-- **New Text File Next To This...** — Create a new text file next to the selected file
+- **New Text File Here...** — Right-click a folder to create a new text file inside it
+- **New Text File Next To This...** — Right-click any file or folder to create a new text file next to it
 - **Open Folder with VS Code** — Open a folder in Visual Studio Code
 - **Open Folder with Cursor** — Open a folder in Cursor
 - **Open Folder with Windsurf** — Open a folder in Windsurf
-- **Open with Fork** — Open a file or folder in Fork (git client)
+- **Open Folder with Fork** — Open a folder in Fork (git client)
 
 On older macOS, these appear under **Services** in the Finder right-click menu. On modern macOS (Sequoia+), the installer offers to install them as **Shortcuts**, which appear under **Quick Actions** in the right-click menu. You can selectively choose which actions to install.
 
@@ -189,7 +189,14 @@ Then enable each Quick Action in Finder:
 2. Go to **Quick Actions** → **Customize...**
 3. Toggle on the actions you want
 
-Folder-only actions (like "Open Folder with VS Code") will only appear when right-clicking folders, even though they show in the Customize list for all contexts.
+The first time you run each shortcut from Quick Actions, macOS will ask for permission to run a script. Click **Always Allow** to avoid being asked again.
+
+### Known Limitations
+
+- **Folder-only actions** (like "Open Folder with VS Code") only appear when right-clicking folders, even though they show in the Customize list for all contexts.
+- **Convert MD to PDF** and other file actions may appear for all file types in the Quick Actions menu. macOS Shortcuts does not support filtering by file extension — only by broad categories (files, folders, PDFs, images, etc.). The scripts handle incorrect file types gracefully.
+- **Convert PDF to MD** is restricted to PDF files only via the `WFPDFContentItem` content class.
+- **Removing Shortcuts** must be done manually — open the Shortcuts app, select the shortcuts, and press Delete. macOS does not provide a way to remove Shortcuts from the command line.
 
 ## Author
 
