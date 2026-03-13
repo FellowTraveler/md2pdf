@@ -166,6 +166,22 @@ The installer adds right-click context menu actions for macOS Finder:
 
 On older macOS, these appear under **Services** in the Finder right-click menu. On modern macOS (Sequoia+), the installer offers to install them as **Shortcuts**, which appear under **Quick Actions** in the right-click menu. You can selectively choose which actions to install.
 
+### Shortcuts Setup (Sequoia+)
+
+After installing Shortcuts, you need to enable script execution:
+
+1. Open the **Shortcuts** app
+2. Go to **Settings** (Cmd+,) → **Advanced**
+3. Check **Allow Running Scripts**
+
+Then enable each Quick Action in Finder:
+
+1. Right-click any file or folder in Finder
+2. Go to **Quick Actions** → **Customize...**
+3. Toggle on the actions you want
+
+Folder-only actions (like "Open Folder with VS Code") will only appear when right-clicking folders, even though they show in the Customize list for all contexts.
+
 ## Author
 
 - Chris Odom - [GitHub](https://github.com/fellowtraveler)

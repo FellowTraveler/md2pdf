@@ -193,10 +193,12 @@ if command -v shortcuts &> /dev/null; then
 			<string>is.workflow.actions.runshellscript</string>
 			<key>WFWorkflowActionParameters</key>
 			<dict>
-				<key>WFShellScriptActionInputMode</key>
-				<string>as arguments</string>
-				<key>COMMAND_STRING</key>
+				<key>Script</key>
 				<string>${escaped_cmd}</string>
+				<key>Shell</key>
+				<string>/bin/bash</string>
+				<key>InputMode</key>
+				<string>as arguments</string>
 			</dict>
 		</dict>
 	</array>
