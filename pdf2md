@@ -94,7 +94,7 @@ import pymupdf4llm
 input_file = sys.argv[1]
 output_file = sys.argv[2]
 
-md = pymupdf4llm.to_markdown(input_file)
+md = pymupdf4llm.to_markdown(input_file, ignore_graphics=True)
 
 # If text extraction found content, write it and exit
 if md.strip():
@@ -181,14 +181,16 @@ if ocr_used:
 
 CRITICAL RULES:
 1. Keep ALL text VERBATIM — do NOT summarize, condense, or omit anything
-2. Every sentence in the input must appear in the output
+2. Every sentence, code snippet, command, and data value in the input MUST appear in the output
 3. Fix only OCR artifacts (garbled characters, broken words)
 4. Remove exact duplicate paragraphs from overlapping page captures
-5. Restore markdown formatting (headers, bold, italic, bullets, tables, code blocks)
-6. Remove UI chrome (Show more/less buttons, spinners, navigation elements)
-7. Output ONLY the cleaned markdown, no preamble or explanation
+5. Remove PDF artifacts: standalone page numbers (e.g. bare "1", "2" on their own line), headers/footers
+6. Restore markdown formatting (headers, bold, italic, bullets, tables, code blocks)
+7. Add language hints to code blocks where detectable (```bash, ```json, etc.)
+8. Remove UI chrome (Show more/less buttons, spinners, navigation elements)
+9. Output ONLY the cleaned markdown, no preamble or explanation
 
-You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input.
+You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input. If anything, ERR ON THE SIDE OF INCLUDING TOO MUCH rather than too little.
 
 ---
 {raw_md}"""
@@ -197,13 +199,17 @@ else:
 
 CRITICAL RULES:
 1. Keep ALL text VERBATIM — do NOT summarize, condense, or omit anything
-2. Every sentence in the input must appear in the output
+2. Every sentence, code snippet, command, and data value in the input MUST appear in the output
 3. Fix broken formatting from PDF extraction (mangled headers, lists, tables, code blocks)
-4. Remove PDF artifacts (page numbers, headers/footers, unnecessary line breaks)
-5. Restore proper markdown structure
-6. Output ONLY the cleaned markdown, no preamble or explanation
+4. Remove PDF artifacts: standalone page numbers (e.g. bare "1", "2" on their own line), headers/footers, unnecessary line breaks
+5. Fix em-dash artifacts: replace ~~—~~ with — and ~~-~~ with - (these are PDF extraction glitches)
+6. Fix heading hierarchy: the PDF often flattens all headings to H1 (#). Restore proper levels (H1 for title, H2 for major sections, H3 for subsections, etc.) based on context
+7. Restore horizontal rules (---) where section dividers were lost or mangled
+8. Add language hints to code blocks where detectable (```bash, ```json, etc.)
+9. Restore proper markdown structure
+10. Output ONLY the cleaned markdown, no preamble or explanation
 
-You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input.
+You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input. If anything, ERR ON THE SIDE OF INCLUDING TOO MUCH rather than too little.
 
 ---
 {raw_md}"""
