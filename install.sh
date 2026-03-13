@@ -155,8 +155,8 @@ if command -v shortcuts &> /dev/null; then
             # Map Automator input type to Shortcuts content item classes
             case "$input_type" in
                 *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
-                *item*)   input_xml='<string>WFFilesContentItem</string>' ;;
-                *)        input_xml='<string>WFFilesContentItem</string>
+                *item*)   input_xml='<string>WFGenericFileContentItem</string>' ;;
+                *)        input_xml='<string>WFGenericFileContentItem</string>
 		<string>WFFolderContentItem</string>' ;;
             esac
 
