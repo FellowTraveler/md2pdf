@@ -86,8 +86,10 @@ for workflow in "$SCRIPT_DIR/"*.workflow; do
     fi
 done
 
-# Restart pasteboard server so Finder picks up the new Quick Actions
+# Restart pasteboard server and Finder so Quick Actions appear immediately
 killall pbs 2>/dev/null || true
+sleep 1
+killall Finder 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"
@@ -102,4 +104,7 @@ if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
     echo ""
 fi
 
+echo -e "${YELLOW}Note:${NC} If Quick Actions don't appear in Finder's right-click menu,"
+echo "you may need to log out and back in for macOS to pick them up."
+echo ""
 echo "Run 'md2pdf --help' or 'pdf2md --help' to get started."
