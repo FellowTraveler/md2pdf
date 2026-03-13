@@ -152,13 +152,26 @@ if command -v shortcuts &> /dev/null; then
                 "$workflow/Contents/document.wflow" 2>/dev/null)
             [[ -z "$cmd" ]] && continue
 
-            # Map Automator input type to Shortcuts content item classes
-            case "$input_type" in
-                *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
-                *item*)   input_xml='<string>WFGenericFileContentItem</string>' ;;
-                *)        input_xml='<string>WFGenericFileContentItem</string>
+            # Read Shortcuts content item classes from Info.plist (if specified)
+            input_xml=""
+            i=0
+            while true; do
+                cls=$(/usr/libexec/PlistBuddy -c "Print :ShortcutInputClasses:$i" \
+                    "$workflow/Contents/Info.plist" 2>/dev/null) || break
+                input_xml="${input_xml}<string>${cls}</string>
+		"
+                i=$((i + 1))
+            done
+
+            # Fall back to Automator input type mapping if no ShortcutInputClasses
+            if [[ -z "$input_xml" ]]; then
+                case "$input_type" in
+                    *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
+                    *item*)   input_xml='<string>WFGenericFileContentItem</string>' ;;
+                    *)        input_xml='<string>WFGenericFileContentItem</string>
 		<string>WFFolderContentItem</string>' ;;
-            esac
+                esac
+            fi
 
             # XML-escape the shell command
             escaped_cmd=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')

@@ -31,5 +31,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>ShortcutInputClasses</key>
+	<array>
+		<string>WFFolderContentItem</string>
+	</array>
 </dict>
 </plist>
