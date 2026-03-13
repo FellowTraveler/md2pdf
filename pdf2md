@@ -147,11 +147,11 @@ if [[ -z "$ANTHROPIC_API_KEY" ]] && [[ -f "$HOME/.config/pdf2md/env" ]]; then
     source "$HOME/.config/pdf2md/env"
 fi
 
-# LLM cleanup for OCR output
-if [[ -n "$OCR_USED" ]] && [[ -n "$ANTHROPIC_API_KEY" ]]; then
-    echo -e "${BLUE}Cleaning up OCR output with LLM...${NC}"
+# LLM cleanup of extracted markdown
+if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+    echo -e "${BLUE}Cleaning up output with LLM...${NC}"
     CLEANUP_TMP="${OUTPUT_FILE}.cleanup.tmp"
-    python3 - "$OUTPUT_FILE" "$CLEANUP_TMP" << 'CLEANUP_PYEOF' || true
+    python3 - "$OUTPUT_FILE" "$CLEANUP_TMP" "$OCR_USED" << 'CLEANUP_PYEOF' || true
 try:
     import anthropic
 except ImportError:
@@ -164,6 +164,7 @@ import sys
 
 output_file = sys.argv[1]
 cleanup_tmp = sys.argv[2]
+ocr_used = sys.argv[3] if len(sys.argv) > 3 else ""
 
 with open(output_file, "r", encoding="utf-8") as f:
     raw_md = f.read()
@@ -171,11 +172,8 @@ with open(output_file, "r", encoding="utf-8") as f:
 if not raw_md.strip():
     sys.exit(0)
 
-client = anthropic.Anthropic()
-message = client.messages.create(
-    model="claude-haiku-4-5-20251001",
-    max_tokens=16384,
-    messages=[{"role": "user", "content": f"""You are a verbatim text reformatter. Reformat this raw OCR text into clean markdown.
+if ocr_used:
+    prompt = f"""You are a verbatim text reformatter. Reformat this raw OCR text into clean markdown.
 
 CRITICAL RULES:
 1. Keep ALL text VERBATIM — do NOT summarize, condense, or omit anything
@@ -189,7 +187,28 @@ CRITICAL RULES:
 You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input.
 
 ---
-{raw_md}"""}],
+{raw_md}"""
+else:
+    prompt = f"""You are a verbatim text reformatter. Clean up this markdown extracted from a PDF.
+
+CRITICAL RULES:
+1. Keep ALL text VERBATIM — do NOT summarize, condense, or omit anything
+2. Every sentence in the input must appear in the output
+3. Fix broken formatting from PDF extraction (mangled headers, lists, tables, code blocks)
+4. Remove PDF artifacts (page numbers, headers/footers, unnecessary line breaks)
+5. Restore proper markdown structure
+6. Output ONLY the cleaned markdown, no preamble or explanation
+
+You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input.
+
+---
+{raw_md}"""
+
+client = anthropic.Anthropic()
+message = client.messages.create(
+    model="claude-haiku-4-5-20251001",
+    max_tokens=16384,
+    messages=[{"role": "user", "content": prompt}],
 )
 
 cleaned = message.content[0].text
@@ -201,10 +220,10 @@ CLEANUP_PYEOF
         echo -e "  ${GREEN}LLM cleanup complete${NC}"
     else
         rm -f "$CLEANUP_TMP"
-        echo -e "  ${YELLOW}LLM cleanup failed, keeping raw OCR output${NC}"
+        echo -e "  ${YELLOW}LLM cleanup failed, keeping raw output${NC}"
     fi
-elif [[ -n "$OCR_USED" ]] && [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY or add it to ~/.config/pdf2md/env${NC}"
+else
+    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY for LLM-powered cleanup of extracted markdown${NC}"
 fi
 
 if [[ -f "$OUTPUT_FILE" ]] && [[ -s "$OUTPUT_FILE" ]]; then
