@@ -104,7 +104,124 @@ if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
     echo ""
 fi
 
-echo -e "${YELLOW}Note:${NC} If Quick Actions don't appear in Finder's right-click menu,"
-echo "you may need to log out and back in for macOS to pick them up."
+# Install Shortcuts for Finder Quick Actions (modern macOS)
+if command -v shortcuts &> /dev/null; then
+    echo -e "${BOLD}Finder Quick Actions (Shortcuts)${NC}"
+    echo "On modern macOS, Shortcuts appear in Finder's right-click Quick Actions menu."
+    echo "Each shortcut requires a one-time confirmation in the Shortcuts app."
+    echo ""
+
+    # Build numbered list of available workflows
+    WF_NAMES=()
+    WF_PATHS=()
+    i=1
+    for workflow in "$SCRIPT_DIR/"*.workflow; do
+        [[ -d "$workflow" ]] || continue
+        WF_NAMES+=("$(basename "$workflow" .workflow)")
+        WF_PATHS+=("$workflow")
+        printf "  %2d) %s\n" "$i" "$(basename "$workflow" .workflow)"
+        i=$((i + 1))
+    done
+
+    echo ""
+    echo "Enter numbers to install (e.g., 1 3 7), 'all', or 'none' to skip:"
+    read -p "> " selection
+
+    SELECTED=()
+    case "$selection" in
+        none|"") ;;
+        all)     SELECTED=($(seq 1 ${#WF_NAMES[@]})) ;;
+        *)       SELECTED=($selection) ;;
+    esac
+
+    if [[ ${#SELECTED[@]} -gt 0 ]]; then
+        SHORTCUTS_TMP=$(mktemp -d)
+        echo ""
+
+        for num in "${SELECTED[@]}"; do
+            idx=$((num - 1))
+            [[ $idx -lt 0 || $idx -ge ${#WF_NAMES[@]} ]] && continue
+
+            workflow="${WF_PATHS[$idx]}"
+            wf_name="${WF_NAMES[$idx]}"
+
+            # Extract shell command and input type from Automator workflow
+            cmd=$(/usr/libexec/PlistBuddy -c "Print :actions:0:action:ActionParameters:COMMAND_STRING" \
+                "$workflow/Contents/document.wflow" 2>/dev/null)
+            input_type=$(/usr/libexec/PlistBuddy -c "Print :workflowMetaData:serviceInputTypeIdentifier" \
+                "$workflow/Contents/document.wflow" 2>/dev/null)
+            [[ -z "$cmd" ]] && continue
+
+            # Map Automator input type to Shortcuts content item classes
+            case "$input_type" in
+                *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
+                *item*)   input_xml='<string>WFFilesContentItem</string>' ;;
+                *)        input_xml='<string>WFFilesContentItem</string>
+		<string>WFFolderContentItem</string>' ;;
+            esac
+
+            # XML-escape the shell command
+            escaped_cmd=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+            # Generate shortcut plist
+            cat > "$SHORTCUTS_TMP/shortcut.plist" << SHORTCUT_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WFWorkflowMinimumClientVersionString</key>
+	<string>900</string>
+	<key>WFWorkflowTypes</key>
+	<array>
+		<string>QuickActions</string>
+	</array>
+	<key>WFWorkflowInputContentItemClasses</key>
+	<array>
+		${input_xml}
+	</array>
+	<key>WFWorkflowIcon</key>
+	<dict>
+		<key>WFWorkflowIconGlyphNumber</key>
+		<integer>59511</integer>
+		<key>WFWorkflowIconStartColor</key>
+		<integer>4282601983</integer>
+	</dict>
+	<key>WFWorkflowActions</key>
+	<array>
+		<dict>
+			<key>WFWorkflowActionIdentifier</key>
+			<string>is.workflow.actions.runshellscript</string>
+			<key>WFWorkflowActionParameters</key>
+			<dict>
+				<key>WFShellScriptActionInputMode</key>
+				<string>as arguments</string>
+				<key>COMMAND_STRING</key>
+				<string>${escaped_cmd}</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>
+SHORTCUT_EOF
+
+            # Convert to binary plist and sign
+            plutil -convert binary1 "$SHORTCUTS_TMP/shortcut.plist" -o "$SHORTCUTS_TMP/unsigned.shortcut"
+            if shortcuts sign -m anyone -i "$SHORTCUTS_TMP/unsigned.shortcut" \
+                -o "$SHORTCUTS_TMP/$wf_name.shortcut" 2>/dev/null; then
+                echo -e "${BLUE}Installing:${NC} Shortcut -> $wf_name"
+                open "$SHORTCUTS_TMP/$wf_name.shortcut"
+                sleep 3
+            else
+                echo -e "${YELLOW}Warning:${NC} Failed to sign shortcut: $wf_name"
+            fi
+        done
+
+        echo ""
+        echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
+        sleep 5
+        rm -rf "$SHORTCUTS_TMP"
+    fi
+fi
+
 echo ""
 echo "Run 'md2pdf --help' or 'pdf2md --help' to get started."

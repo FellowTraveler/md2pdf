@@ -155,8 +155,16 @@ The installer adds right-click context menu actions for macOS Finder:
 
 - **Convert MD to PDF** — Right-click any `.md` file to convert it to PDF
 - **Convert PDF to MD** — Right-click any `.pdf` file to convert it to Markdown
+- **Copy File Contents** — Copy a file's contents to the clipboard (supports images)
+- **Copy Path** — Copy the full path of any file or folder
+- **New Text File Here...** — Create a new text file in the current folder
+- **New Text File Next To This...** — Create a new text file next to the selected file
+- **Open Folder with VS Code** — Open a folder in Visual Studio Code
+- **Open Folder with Cursor** — Open a folder in Cursor
+- **Open Folder with Windsurf** — Open a folder in Windsurf
+- **Open with Fork** — Open a file or folder in Fork (git client)
 
-These appear under **Quick Actions** in the Finder right-click menu. A macOS notification confirms when the conversion is complete.
+On older macOS, these appear under **Services** in the Finder right-click menu. On modern macOS (Sequoia+), the installer offers to install them as **Shortcuts**, which appear under **Quick Actions** in the right-click menu. You can selectively choose which actions to install.
 
 ## Author
 
