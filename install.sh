@@ -74,8 +74,20 @@ for workflow in "$SCRIPT_DIR/"*.workflow; do
         echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
         rm -rf "$SERVICES_DIR/$name"
         cp -R "$workflow" "$SERVICES_DIR/$name"
+
+        # Register as Quick Action in pbs (pasteboard server) so it appears in Finder context menu
+        service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
+        if [[ -n "$service_name" ]]; then
+            pbs_key="(null) - ${service_name} - runWorkflowAsService"
+            defaults write pbs NSServicesStatus -dict-add \
+                "\"$pbs_key\"" \
+                '{ "presentation_modes" = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 1; }; }'
+        fi
     fi
 done
+
+# Restart pasteboard server so Finder picks up the new Quick Actions
+killall pbs 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"
