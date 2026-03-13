@@ -30,6 +30,15 @@ This installs:
 
 If `~/bin` is not in your PATH, the installer will show you how to add it.
 
+### Uninstall
+
+```bash
+cd md2pdf
+./uninstall.sh
+```
+
+This removes scripts, themes, and Automator workflows. **Shortcuts must be removed manually** — open the Shortcuts app, select the shortcuts you want to remove, and press Delete. macOS does not provide a way to remove Shortcuts from the command line.
+
 ## Usage
 
 ```
