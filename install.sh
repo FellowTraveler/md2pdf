@@ -36,6 +36,27 @@ elif ! python3 -c "import pymupdf4llm" 2>/dev/null; then
     echo ""
 fi
 
+# Check for tesseract (required for OCR of image-based PDFs)
+if ! command -v tesseract &> /dev/null; then
+    echo -e "${YELLOW}Installing tesseract (OCR for image-based PDFs)...${NC}"
+    if command -v brew &> /dev/null; then
+        brew install tesseract
+    else
+        echo -e "${YELLOW}Warning: tesseract not found and Homebrew not available.${NC}"
+        echo "Install tesseract manually: https://github.com/tesseract-ocr/tesseract"
+    fi
+    echo ""
+fi
+
+# Check for pytesseract and Pillow (required for OCR)
+if command -v python3 &> /dev/null; then
+    if ! python3 -c "import pytesseract" 2>/dev/null; then
+        echo -e "${YELLOW}Installing pytesseract and Pillow (OCR support)...${NC}"
+        pip3 install pytesseract Pillow
+        echo ""
+    fi
+fi
+
 # Check for anthropic package (optional, for AI cleanup of OCR output)
 if command -v python3 &> /dev/null; then
     if ! python3 -c "import anthropic" 2>/dev/null; then
