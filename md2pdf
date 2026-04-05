@@ -138,6 +138,7 @@ python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" << 'MERMAID_PYEOF'
 import sys
 import re
 import os
+import base64
 import subprocess
 
 input_file = sys.argv[1]
@@ -157,18 +158,20 @@ def render_block(match):
     counter[0] += 1
     diagram_source = match.group(1)
     mmd_file = os.path.join(tmpdir, f"diagram_{idx}.mmd")
-    svg_file = os.path.join(tmpdir, f"diagram_{idx}.svg")
+    png_file = os.path.join(tmpdir, f"diagram_{idx}.png")
     with open(mmd_file, "w") as f:
         f.write(diagram_source)
     result = subprocess.run(
         ["npx", "--yes", "@mermaid-js/mermaid-cli",
-         "-i", mmd_file, "-o", svg_file, "--quiet"],
+         "-i", mmd_file, "-o", png_file, "--quiet"],
         capture_output=True, text=True
     )
-    if result.returncode != 0 or not os.path.exists(svg_file):
+    if result.returncode != 0 or not os.path.exists(png_file):
         print(f"Warning: failed to render mermaid diagram {idx}: {result.stderr}", file=sys.stderr)
         return match.group(0)
-    return f"![diagram](diagram_{idx}.svg)"
+    with open(png_file, "rb") as f:
+        png_b64 = base64.b64encode(f.read()).decode()
+    return f"![diagram](data:image/png;base64,{png_b64})"
 
 modified = pattern.sub(render_block, content)
 
