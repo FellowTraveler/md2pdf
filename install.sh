@@ -32,7 +32,7 @@ if ! command -v python3 &> /dev/null; then
     echo ""
 elif ! python3 -c "import pymupdf4llm" 2>/dev/null; then
     echo -e "${YELLOW}Warning: pymupdf4llm not found. Installing...${NC}"
-    pip3 install pymupdf4llm
+    pip3 install --break-system-packages pymupdf4llm
     echo ""
 fi
 
@@ -52,7 +52,7 @@ fi
 if command -v python3 &> /dev/null; then
     if ! python3 -c "import pytesseract" 2>/dev/null; then
         echo -e "${YELLOW}Installing pytesseract and Pillow (OCR support)...${NC}"
-        pip3 install pytesseract Pillow
+        pip3 install --break-system-packages pytesseract Pillow
         echo ""
     fi
 fi
@@ -61,7 +61,7 @@ fi
 if command -v python3 &> /dev/null; then
     if ! python3 -c "import anthropic" 2>/dev/null; then
         echo -e "${YELLOW}Installing anthropic (for AI cleanup of OCR output)...${NC}"
-        pip3 install anthropic
+        pip3 install --break-system-packages anthropic
         echo ""
     fi
 fi
