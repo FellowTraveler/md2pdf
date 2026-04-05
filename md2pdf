@@ -129,11 +129,73 @@ echo -e "${BLUE}Theme:${NC}      $THEME"
 echo -e "${BLUE}Output:${NC}     $OUTPUT_FILE"
 echo ""
 
+# Pre-process mermaid diagrams: render each ```mermaid block to SVG
+MERMAID_TMPDIR=$(mktemp -d)
+trap "rm -rf '$MERMAID_TMPDIR'" EXIT
+
+PROCESSED_FILE="$INPUT_FILE"
+python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" << 'MERMAID_PYEOF'
+import sys
+import re
+import os
+import subprocess
+
+input_file = sys.argv[1]
+tmpdir = sys.argv[2]
+
+with open(input_file, "r", encoding="utf-8") as f:
+    content = f.read()
+
+pattern = re.compile(r'```mermaid\n(.*?)```', re.DOTALL)
+if not pattern.search(content):
+    sys.exit(0)
+
+counter = [0]
+
+def render_block(match):
+    idx = counter[0]
+    counter[0] += 1
+    diagram_source = match.group(1)
+    mmd_file = os.path.join(tmpdir, f"diagram_{idx}.mmd")
+    svg_file = os.path.join(tmpdir, f"diagram_{idx}.svg")
+    with open(mmd_file, "w") as f:
+        f.write(diagram_source)
+    result = subprocess.run(
+        ["npx", "--yes", "@mermaid-js/mermaid-cli",
+         "-i", mmd_file, "-o", svg_file, "--quiet"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0 or not os.path.exists(svg_file):
+        print(f"Warning: failed to render mermaid diagram {idx}: {result.stderr}", file=sys.stderr)
+        return match.group(0)
+    return f"![diagram](diagram_{idx}.svg)"
+
+modified = pattern.sub(render_block, content)
+
+out_md = os.path.join(tmpdir, os.path.basename(input_file))
+with open(out_md, "w", encoding="utf-8") as f:
+    f.write(modified)
+
+with open(os.path.join(tmpdir, "processed_path.txt"), "w") as f:
+    f.write(out_md)
+MERMAID_PYEOF
+
+if [[ -f "$MERMAID_TMPDIR/processed_path.txt" ]]; then
+    PROCESSED_FILE=$(cat "$MERMAID_TMPDIR/processed_path.txt")
+    echo -e "${BLUE}Mermaid:${NC}   diagrams pre-rendered to SVG"
+fi
+
 # Run md-to-pdf
-npx --yes md-to-pdf "$INPUT_FILE" \
+npx --yes md-to-pdf "$PROCESSED_FILE" \
     --stylesheet "$THEME_FILE" \
     --pdf-options '{"format": "Letter", "margin": {"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}, "printBackground": true}' \
     2>&1 | grep -v "^$"
+
+# If we used a processed temp file, move the PDF to the expected output location
+PROCESSED_PDF="${PROCESSED_FILE%.md}.pdf"
+if [[ "$PROCESSED_FILE" != "$INPUT_FILE" ]] && [[ -f "$PROCESSED_PDF" ]]; then
+    mv "$PROCESSED_PDF" "$OUTPUT_FILE"
+fi
 
 if [[ -f "$OUTPUT_FILE" ]]; then
     echo ""
