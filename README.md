@@ -89,6 +89,21 @@ md2pdf --list    # List available themes with descriptions
 md2pdf --help    # Show help
 ```
 
+### Mermaid Diagrams
+
+Mermaid diagram blocks are automatically pre-rendered before PDF conversion:
+
+````markdown
+```mermaid
+graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do it]
+    B -->|No| D[Skip]
+```
+````
+
+Requires `npx` (bundled with Node.js). The `@mermaid-js/mermaid-cli` package is downloaded automatically on first use via `npx`.
+
 ## Themes
 
 | Theme | Description |
@@ -127,7 +142,10 @@ OUTPUT:
 
 1. **Text extraction** — Uses `pymupdf4llm` to extract text and formatting directly from the PDF.
 2. **OCR fallback** — If no text is found (image-based/scanned PDFs), falls back to `tesseract` OCR.
-3. **AI cleanup** (optional) — If `ANTHROPIC_API_KEY` is set, sends OCR output to Claude Haiku to clean up duplicates, fix artifacts, and restore markdown formatting.
+3. **AI cleanup** (optional) — If `ANTHROPIC_API_KEY` is set, sends output to Claude to clean up duplicates, fix artifacts, and restore markdown formatting.
+4. **Image extraction** (optional) — If `ANTHROPIC_API_KEY` is set, extracts embedded images and uses Claude vision to classify each one:
+   - **Technical diagrams** (flowcharts, sequence diagrams, etc.) — saved as `<name>_p<page>_img<n>.png` alongside the `.md` file, and also converted to a `\`\`\`mermaid` block in the output
+   - **Other images** (photos, screenshots, etc.) — saved as `<name>_p<page>_img<n>.png` and referenced with `![](...)` in the output
 
 ### Examples
 
