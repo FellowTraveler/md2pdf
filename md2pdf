@@ -134,7 +134,8 @@ MERMAID_TMPDIR=$(mktemp -d)
 trap "rm -rf '$MERMAID_TMPDIR'" EXIT
 
 PROCESSED_FILE="$INPUT_FILE"
-python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" << 'MERMAID_PYEOF'
+OUTPUT_BASE="${OUTPUT_FILE%.pdf}"
+python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" "$OUTPUT_BASE" << 'MERMAID_PYEOF'
 import sys
 import re
 import os
@@ -143,6 +144,7 @@ import subprocess
 
 input_file = sys.argv[1]
 tmpdir = sys.argv[2]
+output_base = sys.argv[3]
 
 with open(input_file, "r", encoding="utf-8") as f:
     content = f.read()
@@ -169,6 +171,10 @@ def render_block(match):
     if result.returncode != 0 or not os.path.exists(png_file):
         print(f"Warning: failed to render mermaid diagram {idx}: {result.stderr}", file=sys.stderr)
         return match.group(0)
+    # Save .mmd source alongside the output PDF for use in external viewers
+    saved_mmd = f"{output_base}_diagram_{idx + 1}.mmd"
+    with open(saved_mmd, "w") as f:
+        f.write(diagram_source)
     with open(png_file, "rb") as f:
         png_b64 = base64.b64encode(f.read()).decode()
     return f"![diagram](data:image/png;base64,{png_b64})"
