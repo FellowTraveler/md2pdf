@@ -31,6 +31,14 @@ if ! command -v python3 &> /dev/null; then
     echo -e "${YELLOW}Warning: Python 3 not found. pdf2md requires Python 3 to run.${NC}"
     echo ""
 else
+    # Remove any packages previously installed into the system Python
+    for pkg in pymupdf4llm pymupdf-layout pytesseract Pillow anthropic; do
+        if pip3 show "$pkg" &>/dev/null 2>&1; then
+            echo -e "${YELLOW}Cleaning up:${NC} removing $pkg from system Python"
+            pip3 uninstall --break-system-packages -y "$pkg" 2>/dev/null || true
+        fi
+    done
+
     # Create dedicated venv and install all Python dependencies into it.
     # Using a venv avoids --break-system-packages and works from Finder (absolute path).
     echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv"
