@@ -38,10 +38,11 @@ show_help() {
     echo "    tesseract, pytesseract, Pillow"
     echo "    Install: brew install tesseract && pip3 install pytesseract Pillow"
     echo ""
-    echo -e "${BOLD}AI CLEANUP (optional, for OCR output):${NC}"
-    echo "    Set ANTHROPIC_API_KEY in your environment, or add it to:"
-    echo "      ~/.config/pdf2md/env"
-    echo "    Install: pip3 install anthropic"
+    echo -e "${BOLD}AI CLEANUP (optional, for LLM-powered cleanup and diagram detection):${NC}"
+    echo "    Set one of these in your environment, or add to ~/.config/md2pdf/env:"
+    echo "      ANTHROPIC_API_KEY"
+    echo "      OPENAI_API_KEY"
+    echo "      OPENROUTER_API_KEY"
     echo ""
 }
 
@@ -142,29 +143,31 @@ if [[ -f "/tmp/pdf2md-ocr-used" ]]; then
     rm -f "/tmp/pdf2md-ocr-used"
 fi
 
-# Load API key if not already set
-if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    if [[ -f "$HOME/.config/pdf2md/env" ]]; then
+# Load API keys if not already set in environment
+if [[ -z "$ANTHROPIC_API_KEY" ]] && [[ -z "$OPENAI_API_KEY" ]] && [[ -z "$OPENROUTER_API_KEY" ]]; then
+    if [[ -f "$HOME/.config/md2pdf/env" ]]; then
+        source "$HOME/.config/md2pdf/env"
+    elif [[ -f "$HOME/.config/pdf2md/env" ]]; then
         source "$HOME/.config/pdf2md/env"
     elif [[ -f "$HOME/.zshenv" ]]; then
-        eval "$(grep ANTHROPIC_API_KEY "$HOME/.zshenv")"
+        eval "$(grep -E 'ANTHROPIC_API_KEY|OPENAI_API_KEY|OPENROUTER_API_KEY' "$HOME/.zshenv" 2>/dev/null)" 2>/dev/null || true
     fi
 fi
 
 # LLM cleanup of extracted markdown
-if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+if [[ -n "$ANTHROPIC_API_KEY" ]] || [[ -n "$OPENAI_API_KEY" ]] || [[ -n "$OPENROUTER_API_KEY" ]]; then
     echo -e "${BLUE}Cleaning up output with LLM...${NC}"
     CLEANUP_TMP="${OUTPUT_FILE}.cleanup.tmp"
     "$HOME/.md2pdf-venv/bin/python3" - "$OUTPUT_FILE" "$CLEANUP_TMP" "$OCR_USED" << 'CLEANUP_PYEOF' || true
+import sys, os
+sys.path.insert(0, os.path.expanduser("~/.config/md2pdf"))
 try:
-    import anthropic
+    from llm_helper import text_complete, get_provider
 except ImportError:
-    import sys
-    print("anthropic package not installed, skipping LLM cleanup", file=sys.stderr)
-    print("Install: pip3 install anthropic", file=sys.stderr)
     sys.exit(0)
 
-import sys
+if not get_provider():
+    sys.exit(0)
 
 output_file = sys.argv[1]
 cleanup_tmp = sys.argv[2]
@@ -214,16 +217,10 @@ You MUST NOT shorten, paraphrase, or summarize the text. The output should be ap
 ---
 {raw_md}"""
 
-client = anthropic.Anthropic()
-message = client.messages.create(
-    model="claude-haiku-4-5-20251001",
-    max_tokens=16384,
-    messages=[{"role": "user", "content": prompt}],
-)
-
-cleaned = message.content[0].text
-with open(cleanup_tmp, "w", encoding="utf-8") as f:
-    f.write(cleaned)
+cleaned = text_complete(prompt, max_tokens=16384)
+if cleaned:
+    with open(cleanup_tmp, "w", encoding="utf-8") as f:
+        f.write(cleaned)
 CLEANUP_PYEOF
     if [[ -f "$CLEANUP_TMP" ]] && [[ -s "$CLEANUP_TMP" ]]; then
         mv "$CLEANUP_TMP" "$OUTPUT_FILE"
@@ -233,22 +230,24 @@ CLEANUP_PYEOF
         echo -e "  ${YELLOW}LLM cleanup failed, keeping raw output${NC}"
     fi
 else
-    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY for LLM-powered cleanup of extracted markdown${NC}"
+    echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY for LLM-powered cleanup${NC}"
 fi
 
 # Image extraction and diagram detection phase
-if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+if [[ -n "$ANTHROPIC_API_KEY" ]] || [[ -n "$OPENAI_API_KEY" ]] || [[ -n "$OPENROUTER_API_KEY" ]]; then
     echo -e "${BLUE}Extracting images from PDF...${NC}"
     "$HOME/.md2pdf-venv/bin/python3" - "$INPUT_FILE" "$OUTPUT_FILE" << 'IMAGE_PYEOF' || true
-import sys
-import os
-import base64
+import sys, os
 
+sys.path.insert(0, os.path.expanduser("~/.config/md2pdf"))
 try:
     import pymupdf
-    import anthropic
+    from llm_helper import vision_complete, get_provider
 except ImportError as e:
     print(f"Skipping image extraction: {e}", file=sys.stderr)
+    sys.exit(0)
+
+if not get_provider():
     sys.exit(0)
 
 input_file = sys.argv[1]
@@ -258,52 +257,28 @@ base_name = os.path.splitext(os.path.basename(output_file))[0]
 output_dir = os.path.dirname(os.path.abspath(output_file))
 
 doc = pymupdf.open(input_file)
-client = anthropic.Anthropic()
 insertions = []
 
-# Minimum drawing path count to consider a page as having a vector diagram
 DRAWING_THRESHOLD = 10
-# Minimum pixel area for an embedded raster image to be worth processing
 MIN_IMAGE_AREA = 1000
 
 def classify_and_convert(image_bytes, media_type, img_filename):
-    """Classify image as diagram or not; convert to mermaid if diagram.
-    Returns the markdown string to insert."""
-    img_b64 = base64.b64encode(image_bytes).decode()
-    try:
-        classify_resp = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=10,
-            messages=[{"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
-                {"type": "text", "text": "Is this a technical diagram (flowchart, sequence diagram, architecture chart, state machine, entity relationship diagram, etc.) that could be expressed as Mermaid syntax? Answer only 'yes' or 'no'."}
-            ]}]
-        )
-        is_diagram = classify_resp.content[0].text.strip().lower().startswith('y')
-    except Exception as e:
-        print(f"  Warning: classification failed for {img_filename}: {e}", file=sys.stderr)
-        is_diagram = False
-
-    if is_diagram:
-        try:
-            convert_resp = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=2048,
-                messages=[{"role": "user", "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
-                    {"type": "text", "text": "Convert this diagram to Mermaid syntax. Output only the raw mermaid code (no ```mermaid fences, no explanation)."}
-                ]}]
-            )
-            mermaid_code = convert_resp.content[0].text.strip()
-            if mermaid_code.startswith("```"):
-                lines = mermaid_code.splitlines()
+    result = vision_complete(image_bytes, media_type,
+        "Is this a technical diagram (flowchart, sequence diagram, architecture chart, "
+        "state machine, entity relationship diagram, etc.) that could be expressed as "
+        "Mermaid syntax? Answer only 'yes' or 'no'.", max_tokens=10)
+    if result and result.strip().lower().startswith('y'):
+        mermaid = vision_complete(image_bytes, media_type,
+            "Convert this diagram to Mermaid syntax. Output only the raw mermaid code "
+            "(no ```mermaid fences, no explanation).", max_tokens=2048)
+        if mermaid:
+            mermaid = mermaid.strip()
+            if mermaid.startswith("```"):
+                lines = mermaid.splitlines()
                 inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-                mermaid_code = "\n".join(inner)
+                mermaid = "\n".join(inner)
             print(f"  Diagram -> mermaid: {img_filename}", file=sys.stderr)
-            return f"![{img_filename}]({img_filename})\n\n```mermaid\n{mermaid_code}\n```"
-        except Exception as e:
-            print(f"  Warning: mermaid conversion failed for {img_filename}: {e}", file=sys.stderr)
-
+            return f"![{img_filename}]({img_filename})\n\n```mermaid\n{mermaid}\n```"
     print(f"  Image saved: {img_filename}", file=sys.stderr)
     return f"![{img_filename}]({img_filename})"
 

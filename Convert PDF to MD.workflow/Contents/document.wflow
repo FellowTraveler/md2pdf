@@ -65,10 +65,10 @@ export PATH="$HOME/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 for f in "$@"; do
     if [[ "$f" == *.pdf ]]; then
         output="${f%.pdf}.md"
-        pages=$(python3 -c "import pymupdf; print(len(pymupdf.open('$f')))" 2&gt;/dev/null || echo "?")
+        pages=$("$HOME/.md2pdf-venv/bin/python3" -c "import pymupdf; print(len(pymupdf.open('$f')))" 2&gt;/dev/null || echo "?")
         osascript -e "display notification \"Converting ${pages}-page PDF. This may take a few minutes...\" with title \"PDF to MD\" sound name \"Submarine\""
         pdf2md "$f" 2&gt;&amp;1
-        if [ $? -eq 0 ] &amp;&amp; [ -s "$output" ]; then
+        if [ -s "$output" ]; then
             osascript -e "display notification \"Markdown saved: $(basename "$output")\" with title \"PDF to MD\" sound name \"Glass\""
         else
             osascript -e "display notification \"Conversion failed\" with title \"PDF to MD\" sound name \"Basso\""
