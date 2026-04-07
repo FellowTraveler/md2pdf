@@ -32,6 +32,12 @@ if [[ -d "$THEME_DIR" ]]; then
     rm -rf "$THEME_DIR"
 fi
 
+# Remove Python venv
+if [[ -d "$HOME/.md2pdf-venv" ]]; then
+    echo -e "${BLUE}Removing:${NC} ~/.md2pdf-venv"
+    rm -rf "$HOME/.md2pdf-venv"
+fi
+
 # Remove Automator workflows from Services
 for workflow in "$SCRIPT_DIR/"*.workflow; do
     [[ -d "$workflow" ]] || continue

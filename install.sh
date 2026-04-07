@@ -26,13 +26,17 @@ if ! command -v node &> /dev/null; then
     echo ""
 fi
 
-# Check for Python 3 and pymupdf4llm (required for pdf2md)
+# Check for Python 3
 if ! command -v python3 &> /dev/null; then
     echo -e "${YELLOW}Warning: Python 3 not found. pdf2md requires Python 3 to run.${NC}"
     echo ""
-elif ! python3 -c "import pymupdf4llm" 2>/dev/null; then
-    echo -e "${YELLOW}Warning: pymupdf4llm not found. Installing...${NC}"
-    pip3 install --break-system-packages pymupdf4llm
+else
+    # Create dedicated venv and install all Python dependencies into it.
+    # Using a venv avoids --break-system-packages and works from Finder (absolute path).
+    echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv"
+    python3 -m venv "$HOME/.md2pdf-venv"
+    "$HOME/.md2pdf-venv/bin/pip" install --quiet --upgrade \
+        pymupdf4llm pytesseract Pillow anthropic
     echo ""
 fi
 
@@ -46,24 +50,6 @@ if ! command -v tesseract &> /dev/null; then
         echo "Install tesseract manually: https://github.com/tesseract-ocr/tesseract"
     fi
     echo ""
-fi
-
-# Check for pytesseract and Pillow (required for OCR)
-if command -v python3 &> /dev/null; then
-    if ! python3 -c "import pytesseract" 2>/dev/null; then
-        echo -e "${YELLOW}Installing pytesseract and Pillow (OCR support)...${NC}"
-        pip3 install --break-system-packages pytesseract Pillow
-        echo ""
-    fi
-fi
-
-# Check for anthropic package (optional, for AI cleanup of OCR output)
-if command -v python3 &> /dev/null; then
-    if ! python3 -c "import anthropic" 2>/dev/null; then
-        echo -e "${YELLOW}Installing anthropic (for AI cleanup of OCR output)...${NC}"
-        pip3 install --break-system-packages anthropic
-        echo ""
-    fi
 fi
 
 # Create bin directory if needed

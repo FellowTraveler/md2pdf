@@ -57,10 +57,10 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Check for pymupdf4llm
-if ! python3 -c "import pymupdf4llm" 2>/dev/null; then
+# Check for pymupdf4llm in the dedicated venv
+if ! "$HOME/.md2pdf-venv/bin/python3" -c "import pymupdf4llm" 2>/dev/null; then
     echo -e "${RED}Error: pymupdf4llm not found.${NC}"
-    echo "Install: pip3 install pymupdf4llm"
+    echo "Install: run ./install.sh to set up the Python venv"
     exit 1
 fi
 
@@ -87,7 +87,7 @@ echo ""
 
 # Convert PDF to markdown using pymupdf4llm, with OCR fallback for image-based PDFs
 OCR_USED=""
-python3 - "$INPUT_FILE" "$OUTPUT_FILE" << 'PYEOF'
+"$HOME/.md2pdf-venv/bin/python3" - "$INPUT_FILE" "$OUTPUT_FILE" << 'PYEOF'
 import sys
 import pymupdf4llm
 
@@ -155,7 +155,7 @@ fi
 if [[ -n "$ANTHROPIC_API_KEY" ]]; then
     echo -e "${BLUE}Cleaning up output with LLM...${NC}"
     CLEANUP_TMP="${OUTPUT_FILE}.cleanup.tmp"
-    python3 - "$OUTPUT_FILE" "$CLEANUP_TMP" "$OCR_USED" << 'CLEANUP_PYEOF' || true
+    "$HOME/.md2pdf-venv/bin/python3" - "$OUTPUT_FILE" "$CLEANUP_TMP" "$OCR_USED" << 'CLEANUP_PYEOF' || true
 try:
     import anthropic
 except ImportError:
@@ -239,7 +239,7 @@ fi
 # Image extraction and diagram detection phase
 if [[ -n "$ANTHROPIC_API_KEY" ]]; then
     echo -e "${BLUE}Extracting images from PDF...${NC}"
-    python3 - "$INPUT_FILE" "$OUTPUT_FILE" << 'IMAGE_PYEOF' || true
+    "$HOME/.md2pdf-venv/bin/python3" - "$INPUT_FILE" "$OUTPUT_FILE" << 'IMAGE_PYEOF' || true
 import sys
 import os
 import base64
