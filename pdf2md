@@ -259,15 +259,31 @@ output_dir = os.path.dirname(os.path.abspath(output_file))
 doc = pymupdf.open(input_file)
 insertions = []
 
-DRAWING_THRESHOLD = 10
+DRAWING_THRESHOLD = 25
 MIN_IMAGE_AREA = 1000
 
-def classify_and_convert(image_bytes, media_type, img_filename):
-    result = vision_complete(image_bytes, media_type,
+def classify_and_convert(image_bytes, media_type, img_filename, img_path):
+    # Step 1: is it meaningful content worth including at all?
+    worth_it = vision_complete(image_bytes, media_type,
+        "Is this a meaningful image worth including in a document — "
+        "such as a diagram, chart, photo, figure, or screenshot of actual UI content? "
+        "Answer only 'yes' or 'no'. Answer 'no' for: screenshots of plain text, "
+        "decorative borders, page backgrounds, or blank/near-blank images.",
+        max_tokens=10)
+    if not worth_it or not worth_it.strip().lower().startswith('y'):
+        print(f"  Skipping (not meaningful): {img_filename}", file=sys.stderr)
+        return None
+
+    # Write file only now that we know it's worth keeping
+    with open(img_path, "wb") as f:
+        f.write(image_bytes)
+
+    # Step 2: is it a technical diagram convertible to mermaid?
+    is_diagram = vision_complete(image_bytes, media_type,
         "Is this a technical diagram (flowchart, sequence diagram, architecture chart, "
         "state machine, entity relationship diagram, etc.) that could be expressed as "
         "Mermaid syntax? Answer only 'yes' or 'no'.", max_tokens=10)
-    if result and result.strip().lower().startswith('y'):
+    if is_diagram and is_diagram.strip().lower().startswith('y'):
         mermaid = vision_complete(image_bytes, media_type,
             "Convert this diagram to Mermaid syntax. Output only the raw mermaid code "
             "(no ```mermaid fences, no explanation).", max_tokens=2048)
@@ -279,6 +295,7 @@ def classify_and_convert(image_bytes, media_type, img_filename):
                 mermaid = "\n".join(inner)
             print(f"  Diagram -> mermaid: {img_filename}", file=sys.stderr)
             return f"![{img_filename}]({img_filename})\n\n```mermaid\n{mermaid}\n```"
+
     print(f"  Image saved: {img_filename}", file=sys.stderr)
     return f"![{img_filename}]({img_filename})"
 
@@ -301,11 +318,10 @@ for page_num, page in enumerate(doc):
         image_ext = base_image.get("ext", "png")
         img_filename = f"{base_name}_p{page_num+1}_img{img_idx+1}.{image_ext}"
         img_path = os.path.join(output_dir, img_filename)
-        with open(img_path, "wb") as f:
-            f.write(image_bytes)
-
         media_type = "image/jpeg" if image_ext in ("jpg", "jpeg") else f"image/{image_ext}"
-        insertions.append(classify_and_convert(image_bytes, media_type, img_filename))
+        result = classify_and_convert(image_bytes, media_type, img_filename, img_path)
+        if result is not None:
+            insertions.append(result)
 
     # Process vector drawings: render the page region containing drawings as PNG
     drawings = page.get_drawings()
@@ -317,13 +333,18 @@ for page_num, page in enumerate(doc):
             y0 = min(r.y0 for r in rects)
             x1 = max(r.x1 for r in rects)
             y1 = max(r.y1 for r in rects)
+            # Skip drawing regions that are too narrow/short to be real diagrams
+            page_rect = page.rect
+            if (x1 - x0) < page_rect.width * 0.15 or (y1 - y0) < page_rect.height * 0.15:
+                continue
             clip = pymupdf.Rect(x0, y0, x1, y1)
             pix = page.get_pixmap(dpi=150, clip=clip)
             img_filename = f"{base_name}_p{page_num+1}_drawing.png"
             img_path = os.path.join(output_dir, img_filename)
-            pix.save(img_path)
             image_bytes = pix.tobytes("png")
-            insertions.append(classify_and_convert(image_bytes, "image/png", img_filename))
+            result = classify_and_convert(image_bytes, "image/png", img_filename, img_path)
+            if result is not None:
+                insertions.append(result)
 
 doc.close()
 
