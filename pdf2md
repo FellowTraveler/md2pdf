@@ -281,16 +281,14 @@ def classify_and_convert(image_bytes, media_type, img_filename, img_path):
         print(f"  Skipping (not meaningful): {img_filename}", file=sys.stderr)
         return None
 
-    # Write file only now that we know it's worth keeping
-    with open(img_path, "wb") as f:
-        f.write(image_bytes)
-
     # Step 2: is it a technical diagram convertible to mermaid?
     is_diagram = vision_complete(image_bytes, media_type,
         "Is this a technical diagram (flowchart, sequence diagram, architecture chart, "
         "state machine, entity relationship diagram, etc.) that could be expressed as "
         "Mermaid syntax? Answer only 'yes' or 'no'.", max_tokens=10)
     if is_diagram and is_diagram.strip().lower().startswith('y'):
+        with open(img_path, "wb") as f:
+            f.write(image_bytes)
         mermaid = vision_complete(image_bytes, media_type,
             "Convert this diagram to Mermaid syntax. Output only the raw mermaid code "
             "(no ```mermaid fences, no explanation).", max_tokens=2048)
@@ -303,6 +301,20 @@ def classify_and_convert(image_bytes, media_type, img_filename, img_path):
             print(f"  Diagram -> mermaid: {img_filename}", file=sys.stderr)
             return f"![{img_filename}]({img_filename})\n\n```mermaid\n{mermaid}\n```"
 
+    # Not a diagram — convert to markdown text/tables instead of saving as image
+    md_text = vision_complete(image_bytes, media_type,
+        "Convert this image to clean markdown. "
+        "If it contains one or more tables, use GitHub-flavored markdown table syntax. "
+        "If it contains text or lists, preserve them as markdown. "
+        "Output ONLY the markdown content, no preamble or explanation.",
+        max_tokens=4096)
+    if md_text and md_text.strip():
+        print(f"  Converted to markdown: {img_filename}", file=sys.stderr)
+        return md_text.strip()
+
+    # Fallback: save as image if conversion produced nothing
+    with open(img_path, "wb") as f:
+        f.write(image_bytes)
     print(f"  Image saved: {img_filename}", file=sys.stderr)
     return f"![{img_filename}]({img_filename})"
 
