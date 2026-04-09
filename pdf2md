@@ -97,10 +97,14 @@ output_file = sys.argv[2]
 
 md = pymupdf4llm.to_markdown(input_file, ignore_graphics=True)
 
-# If text extraction found content, write it and exit
+# If text extraction found content, inject page markers and write
 if md.strip():
+    # pymupdf4llm uses \n-----\n between pages; inject <!-- page-N --> markers
+    sep = "\n-----\n"
+    parts = md.split(sep)
+    marked = sep.join(f"<!-- page-{i+1} -->\n{p}" for i, p in enumerate(parts))
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write(md)
+        f.write(marked)
     sys.exit(0)
 
 # No text found — try OCR fallback
@@ -128,7 +132,8 @@ for i, page in enumerate(doc):
     print(f"  OCR page {i + 1}/{len(doc)}", file=sys.stderr)
 doc.close()
 
-md = "\n\n---\n\n".join(pages)
+marked_pages = [f"<!-- page-{i+1} -->\n{p}" for i, p in enumerate(pages)]
+md = "\n\n---\n\n".join(marked_pages)
 with open(output_file, "w", encoding="utf-8") as f:
     f.write(md)
 
@@ -191,7 +196,8 @@ CRITICAL RULES:
 6. Restore markdown formatting (headers, bold, italic, bullets, tables, code blocks)
 7. Add language hints to code blocks where detectable (```bash, ```json, etc.)
 8. Remove UI chrome (Show more/less buttons, spinners, navigation elements)
-9. Output ONLY the cleaned markdown, no preamble or explanation
+9. Preserve HTML comments of the form <!-- page-N --> exactly as-is — do not remove or alter them
+10. Output ONLY the cleaned markdown, no preamble or explanation
 
 You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input. If anything, ERR ON THE SIDE OF INCLUDING TOO MUCH rather than too little.
 
@@ -210,7 +216,8 @@ CRITICAL RULES:
 7. Restore horizontal rules (---) where section dividers were lost or mangled
 8. Add language hints to code blocks where detectable (```bash, ```json, etc.)
 9. Restore proper markdown structure
-10. Output ONLY the cleaned markdown, no preamble or explanation
+10. Preserve HTML comments of the form <!-- page-N --> exactly as-is — do not remove or alter them
+11. Output ONLY the cleaned markdown, no preamble or explanation
 
 You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input. If anything, ERR ON THE SIDE OF INCLUDING TOO MUCH rather than too little.
 
@@ -257,7 +264,7 @@ base_name = os.path.splitext(os.path.basename(output_file))[0]
 output_dir = os.path.dirname(os.path.abspath(output_file))
 
 doc = pymupdf.open(input_file)
-insertions = []
+page_images = {}
 
 DRAWING_THRESHOLD = 25
 MIN_IMAGE_AREA = 1000
@@ -321,7 +328,7 @@ for page_num, page in enumerate(doc):
         media_type = "image/jpeg" if image_ext in ("jpg", "jpeg") else f"image/{image_ext}"
         result = classify_and_convert(image_bytes, media_type, img_filename, img_path)
         if result is not None:
-            insertions.append(result)
+            page_images.setdefault(page_num + 1, []).append(result)
 
     # Process vector drawings: render the page region containing drawings as PNG
     drawings = page.get_drawings()
@@ -344,17 +351,41 @@ for page_num, page in enumerate(doc):
             image_bytes = pix.tobytes("png")
             result = classify_and_convert(image_bytes, "image/png", img_filename, img_path)
             if result is not None:
-                insertions.append(result)
+                page_images.setdefault(page_num + 1, []).append(result)
 
 doc.close()
 
-if not insertions:
+if not page_images:
     sys.exit(0)
 
-with open(output_file, "a", encoding="utf-8") as f:
-    f.write("\n\n## Extracted Images\n\n")
-    for img_md in insertions:
-        f.write(img_md + "\n\n")
+# Insert images inline after their page's text, then strip page markers
+import re
+
+with open(output_file, "r", encoding="utf-8") as f:
+    content = f.read()
+
+remaining = dict(page_images)
+segments = re.split(r'(<!-- page-\d+ -->)', content)
+result_parts = []
+current_page = None
+for seg in segments:
+    m = re.match(r'<!-- page-(\d+) -->', seg)
+    if m:
+        current_page = int(m.group(1))
+        # Drop the marker from output
+    else:
+        result_parts.append(seg)
+        if current_page is not None and current_page in remaining:
+            for img_md in remaining.pop(current_page):
+                result_parts.append(f"\n\n{img_md}\n\n")
+
+# Any images whose page marker wasn't found: append at end
+for pnum in sorted(remaining.keys()):
+    for img_md in remaining[pnum]:
+        result_parts.append(f"\n\n{img_md}\n\n")
+
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write("".join(result_parts))
 IMAGE_PYEOF
 else
     echo -e "  ${YELLOW}Tip: Set ANTHROPIC_API_KEY for diagram detection in images${NC}"
