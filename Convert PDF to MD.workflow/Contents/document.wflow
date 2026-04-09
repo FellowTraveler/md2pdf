@@ -70,6 +70,7 @@ for f in "$@"; do
         pdf2md "$f" 2&gt;&amp;1
         if [ -s "$output" ]; then
             osascript -e "display notification \"Markdown saved: $(basename "$output")\" with title \"PDF to MD\" sound name \"Glass\""
+            open -R "$output"
         else
             osascript -e "display notification \"Conversion failed\" with title \"PDF to MD\" sound name \"Basso\""
         fi
