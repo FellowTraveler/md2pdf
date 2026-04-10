@@ -342,7 +342,9 @@ for page_num, page in enumerate(doc):
         if result is not None:
             page_images.setdefault(page_num + 1, []).append(result)
 
-    # Process vector drawings: render the page region containing drawings as PNG
+    # Process vector drawings: skip if page already has raster images (avoids duplicates)
+    if (page_num + 1) in page_images:
+        continue
     drawings = page.get_drawings()
     if len(drawings) >= DRAWING_THRESHOLD:
         # Compute bounding box of all drawings on this page
