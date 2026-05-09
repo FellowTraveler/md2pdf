@@ -196,12 +196,37 @@ if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
     echo ""
 fi
 
-# Install Shortcuts for Finder Quick Actions (modern macOS)
+# Install Shortcuts for Finder Quick Actions (modern macOS).
+# Requires iCloud sign-in — macOS refuses to import unsigned shortcut files.
 if command -v shortcuts &> /dev/null; then
-    echo -e "${BOLD}Finder Quick Actions (Shortcuts)${NC}"
-    echo "On modern macOS, Shortcuts appear in Finder's right-click Quick Actions menu."
-    echo "Each shortcut requires a one-time confirmation in the Shortcuts app."
+    echo -e "${BOLD}Shortcuts App Integration (optional)${NC}"
+    echo "Adds these actions to the Shortcuts app as Finder Quick Actions."
+    echo "Requires iCloud sign-in — macOS blocks unsigned shortcut files."
     echo ""
+
+    # Probe whether iCloud signing is available by trying to sign a minimal
+    # binary plist. A format error (iCloud available) won't mention "icloud";
+    # only the actual iCloud-missing error will.
+    _PROBE_TMP=$(mktemp /tmp/probe.XXXXXX.shortcut)
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' \
+        | plutil -convert binary1 - -o "$_PROBE_TMP" 2>/dev/null
+    _SIGN_ERR=$(shortcuts sign -m anyone -i "$_PROBE_TMP" -o /dev/null 2>&1 || true)
+    rm -f "$_PROBE_TMP"
+    if echo "$_SIGN_ERR" | grep -qi "icloud"; then
+        _CAN_SIGN=false
+    else
+        _CAN_SIGN=true
+    fi
+
+    if [[ "$_CAN_SIGN" != "true" ]]; then
+        echo -e "${YELLOW}Skipped:${NC} iCloud sign-in required for Shortcuts app integration."
+        echo ""
+        echo "To add shortcuts later: sign in to iCloud (System Settings → Apple Account)"
+        echo "and re-run ./install.sh"
+        echo ""
+        echo "Your Quick Actions are already installed as Automator Services."
+        echo "Access them in Finder → right-click any file or folder → Services."
+    else
 
     # Build numbered list of available workflows
     WF_NAMES=()
@@ -311,9 +336,11 @@ if command -v shortcuts &> /dev/null; then
 </plist>
 SHORTCUT_EOF
 
-            # Convert to binary plist and sign
-            plutil -convert binary1 "$SHORTCUTS_TMP/shortcut.plist" -o "$SHORTCUTS_TMP/unsigned.shortcut"
-            if shortcuts sign -m anyone -i "$SHORTCUTS_TMP/unsigned.shortcut" \
+            # Convert to binary plist and sign (iCloud confirmed available above)
+            plutil -convert binary1 "$SHORTCUTS_TMP/shortcut.plist" \
+                -o "$SHORTCUTS_TMP/unsigned.shortcut"
+            if shortcuts sign -m anyone \
+                -i "$SHORTCUTS_TMP/unsigned.shortcut" \
                 -o "$SHORTCUTS_TMP/$wf_name.shortcut" 2>/dev/null; then
                 echo -e "${BLUE}Installing:${NC} Shortcut -> $wf_name"
                 open "$SHORTCUTS_TMP/$wf_name.shortcut"
@@ -328,6 +355,8 @@ SHORTCUT_EOF
         sleep 5
         rm -rf "$SHORTCUTS_TMP"
     fi
+
+    fi  # _CAN_SIGN
 fi
 
 echo ""
