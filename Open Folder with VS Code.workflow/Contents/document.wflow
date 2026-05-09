@@ -61,7 +61,7 @@
 					<key>COMMAND_STRING</key>
 					<string>for f in "$@"
 do
-    open -a "Visual Studio Code" "$f"
+    open -n -a "Visual Studio Code" "$f"
 done</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
