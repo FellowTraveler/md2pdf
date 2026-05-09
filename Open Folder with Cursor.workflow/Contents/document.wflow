@@ -65,7 +65,7 @@ do
         /usr/local/bin/cursor \
         /opt/homebrew/bin/cursor \
         "/Applications/Cursor.app/Contents/Resources/app/bin/cursor"; do
-        [ -x "$candidate" ] && { "$candidate" --new-window "$f"; break; }
+        [ -x "$candidate" ] &amp;&amp; { "$candidate" --new-window "$f"; break; }
     done
 done</string>
 					<key>CheckedForUserDefaultShell</key>

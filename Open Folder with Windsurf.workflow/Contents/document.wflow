@@ -66,7 +66,7 @@ do
         /opt/homebrew/bin/windsurf \
         "$HOME/.codeium/windsurf/bin/windsurf" \
         "/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf"; do
-        [ -x "$candidate" ] && { "$candidate" --new-window "$f"; break; }
+        [ -x "$candidate" ] &amp;&amp; { "$candidate" --new-window "$f"; break; }
     done
 done</string>
 					<key>CheckedForUserDefaultShell</key>
