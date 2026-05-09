@@ -61,7 +61,13 @@
 					<key>COMMAND_STRING</key>
 					<string>for f in "$@"
 do
-    "$HOME/.codeium/windsurf/bin/windsurf" --new-window "$f"
+    for candidate in \
+        /usr/local/bin/windsurf \
+        /opt/homebrew/bin/windsurf \
+        "$HOME/.codeium/windsurf/bin/windsurf" \
+        "/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf"; do
+        [ -x "$candidate" ] && { "$candidate" --new-window "$f"; break; }
+    done
 done</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
