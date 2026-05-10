@@ -61,7 +61,13 @@
 					<key>COMMAND_STRING</key>
 					<string>for f in "$@"
 do
-    open -a Fork "$f"
+    if [ -x /usr/local/bin/fork ]; then
+        /usr/local/bin/fork "$f"
+    elif [ -x /opt/homebrew/bin/fork ]; then
+        /opt/homebrew/bin/fork "$f"
+    else
+        open -a Fork "$f"
+    fi
 done</string>
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
