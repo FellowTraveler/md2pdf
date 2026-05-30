@@ -89,8 +89,9 @@ echo ""
 # Convert PDF to markdown using pymupdf4llm, with OCR fallback for image-based PDFs
 OCR_USED=""
 "$HOME/.md2pdf-venv/bin/python3" - "$INPUT_FILE" "$OUTPUT_FILE" << 'PYEOF'
-import sys
+import sys, re, json
 import pymupdf4llm
+import pymupdf
 
 input_file = sys.argv[1]
 output_file = sys.argv[2]
@@ -103,6 +104,51 @@ if md.strip():
     sep = "\n-----\n"
     parts = md.split(sep)
     marked = sep.join(f"<!-- page-{i+1} -->\n{p}" for i, p in enumerate(parts))
+
+    # pymupdf4llm misclassifies some text regions as "picture" boxes and emits
+    # placeholders for them. Recover the real text via direct PDF extraction.
+    PLACEHOLDER = re.compile(
+        r'\*\*==> picture \[(\d+) x (\d+)\] intentionally omitted <==\*\*'
+    )
+    if PLACEHOLDER.search(marked):
+        doc = pymupdf.open(input_file)
+
+        # Build a global ordered list of all text blocks across all pages.
+        # pymupdf4llm may merge all pages into one when using OCR mode, so
+        # page-marker-based splitting is unreliable. Instead we match placeholders
+        # to blocks globally in document order (page 1 → 2 → ...).
+        all_blocks = []  # (w, h, text) in document order
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            for b in page.get_text("blocks"):
+                if b[6] == 0 and b[4].strip():
+                    all_blocks.append((round(b[2] - b[0]), round(b[3] - b[1]), b[4].strip()))
+        doc.close()
+
+        used = set()
+        replacements = []
+        for m in PLACEHOLDER.finditer(marked):
+            pw, ph = int(m.group(1)), int(m.group(2))
+            found = ""
+            for i, (bw, bh, text) in enumerate(all_blocks):
+                if i not in used and abs(bw - pw) <= 3 and abs(bh - ph) <= 3:
+                    used.add(i)
+                    found = text
+                    break
+            replacements.append(found)
+
+        if any(replacements):
+            idx = [0]
+            def to_codeblock(m):
+                text = replacements[idx[0]] if idx[0] < len(replacements) else ""
+                idx[0] += 1
+                return f"```\n{text}\n```" if text else ""
+            marked = PLACEHOLDER.sub(to_codeblock, marked)
+            # Signal to the shell that placeholder recovery ran, so LLM cleanup
+            # can be skipped — LLM compresses long docs and drops the recovered text.
+            with open("/tmp/pdf2md-pic-recovered", "w") as f:
+                f.write("1")
+
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(marked)
     sys.exit(0)
@@ -160,7 +206,15 @@ if [[ -z "$ANTHROPIC_API_KEY" ]] && [[ -z "$OPENAI_API_KEY" ]] && [[ -z "$OPENRO
 fi
 
 # LLM cleanup of extracted markdown
-if [[ -n "$ANTHROPIC_API_KEY" ]] || [[ -n "$OPENAI_API_KEY" ]] || [[ -n "$OPENROUTER_API_KEY" ]]; then
+# Skip if picture placeholder recovery ran — LLM compresses long docs and drops
+# the recovered text, producing worse output than the raw extraction.
+PIC_RECOVERED=""
+if [[ -f "/tmp/pdf2md-pic-recovered" ]]; then
+    PIC_RECOVERED="yes"
+    rm -f "/tmp/pdf2md-pic-recovered"
+fi
+
+if [[ -z "$PIC_RECOVERED" ]] && { [[ -n "$ANTHROPIC_API_KEY" ]] || [[ -n "$OPENAI_API_KEY" ]] || [[ -n "$OPENROUTER_API_KEY" ]]; }; then
     echo -e "${BLUE}Cleaning up output with LLM...${NC}"
     CLEANUP_TMP="${OUTPUT_FILE}.cleanup.tmp"
     "$HOME/.md2pdf-venv/bin/python3" - "$OUTPUT_FILE" "$CLEANUP_TMP" "$OCR_USED" << 'CLEANUP_PYEOF' || true
@@ -197,7 +251,8 @@ CRITICAL RULES:
 7. Add language hints to code blocks where detectable (```bash, ```json, etc.)
 8. Remove UI chrome (Show more/less buttons, spinners, navigation elements)
 9. Preserve HTML comments of the form <!-- page-N --> exactly as-is — do not remove or alter them
-10. Output ONLY the cleaned markdown, no preamble or explanation
+10. Preserve markers of the form `**==> picture [W x H] intentionally omitted <==**` exactly as-is — do not remove or reformat them
+11. Output ONLY the cleaned markdown, no preamble or explanation
 
 You MUST NOT shorten, paraphrase, or summarize the text. The output should be approximately the same length as the input. If anything, ERR ON THE SIDE OF INCLUDING TOO MUCH rather than too little.
 
