@@ -136,20 +136,19 @@ def transcribe_elevenlabs(path):
     return segments, duration
 
 
-def transcribe_whisper_pyannote(path, model_size):
-    from faster_whisper import WhisperModel
+def _run_pyannote(path, hf_token):
     from pyannote.audio import Pipeline
-
-    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
-    model = WhisperModel(model_size, device="auto", compute_type="auto")
-    whisper_segs, info = model.transcribe(str(path), beam_size=5, word_timestamps=True)
-    whisper_segs = list(whisper_segs)
-
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=hf_token,
+        token=hf_token,
     )
-    diarization = pipeline(str(path))
+    return pipeline(str(path))
+
+
+def _merge_whisper_diarization(path, model_size, diarization):
+    from faster_whisper import WhisperModel
+    model = WhisperModel(model_size, device="auto", compute_type="auto")
+    whisper_segs, info = model.transcribe(str(path), beam_size=5, word_timestamps=True)
 
     def speaker_at(t):
         for turn, _, speaker in diarization.itertracks(yield_label=True):
@@ -172,8 +171,17 @@ def transcribe_whisper_pyannote(path, model_size):
                 cur_text += " " + word.text
     if cur_text.strip():
         segments.append((cur_spk, cur_start, cur_end, cur_text.strip()))
-
     return segments, info.duration
+
+
+def build_markdown_raw(path, segments, duration, model_size):
+    name = Path(path).name
+    today = date.today().isoformat()
+    text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
+    return (f"# Transcript: {name}\n\n"
+            f"**Date:** {today}\n"
+            f"**Duration:** {fmt_duration(duration)}\n"
+            f"**Transcribed by:** Whisper ({model_size})\n\n---\n\n{text}\n")
 
 
 def process_file(path):
@@ -190,28 +198,35 @@ def process_file(path):
     model_size = os.environ.get("WHISPER_MODEL", "base")
 
     try:
-        if el_key:
+        # Step 1: always run Whisper (fast, local, free)
+        whisper_segs, duration = whisper_transcribe(p, model_size)
+
+        # Step 2: if HF token, check speaker count locally before deciding on cloud
+        if hf_token:
             try:
-                segs, duration = transcribe_elevenlabs(p)
-                md = build_markdown_diarized(p, segs, duration, "ElevenLabs (scribe_v1)")
-            except ImportError:
-                print("Warning: elevenlabs package not installed, falling back to Whisper", file=sys.stderr)
-                el_key = None
-        if not el_key:
-            if hf_token:
-                try:
-                    segs, duration = transcribe_whisper_pyannote(p, model_size)
-                    md = build_markdown_diarized(p, segs, duration,
-                                                 f"Whisper ({model_size}) + speaker diarization")
-                except ImportError:
-                    print("Warning: pyannote not installed, falling back to Whisper-only", file=sys.stderr)
-                    hf_token = None
-                except Exception as e:
-                    print(f"Warning: diarization failed ({e}), falling back to Whisper-only", file=sys.stderr)
-                    hf_token = None
-            if not hf_token:
-                segs, duration = whisper_transcribe(p, model_size)
-                md = build_markdown_whisper_only(p, segs, duration, model_size)
+                diarization = _run_pyannote(p, hf_token)
+                n_speakers = len({spk for _, _, spk in diarization.itertracks(yield_label=True)})
+            except Exception as e:
+                print(f"Warning: speaker detection failed ({e}), using Whisper-only", file=sys.stderr)
+                n_speakers = 1
+
+            if n_speakers <= 1:
+                md = build_markdown_raw(p, whisper_segs, duration, model_size)
+            elif el_key:
+                segs, dur = transcribe_elevenlabs(p)
+                md = build_markdown_diarized(p, segs, dur, "ElevenLabs (scribe_v1)")
+            else:
+                segs, dur = _merge_whisper_diarization(p, model_size, diarization)
+                md = build_markdown_diarized(p, segs, dur, f"Whisper ({model_size}) + speaker diarization")
+
+        elif el_key:
+            # No local speaker check available — let ElevenLabs decide
+            segs, dur = transcribe_elevenlabs(p)
+            md = build_markdown_diarized(p, segs, dur, "ElevenLabs (scribe_v1)")
+
+        else:
+            md = build_markdown_whisper_only(p, whisper_segs, duration, model_size)
+
     except Exception as e:
         msg = str(e)
         error_md = f"# Transcription Failed: {p.name}\n\n**Date:** {datetime.date.today().isoformat()}\n\n**Error:**\n\n```\n{msg}\n```\n"
