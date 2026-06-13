@@ -142,7 +142,8 @@ def _run_pyannote(path, hf_token):
         "pyannote/speaker-diarization-3.1",
         token=hf_token,
     )
-    return pipeline(str(path))
+    result = pipeline(str(path))
+    return result.speaker_diarization if hasattr(result, "speaker_diarization") else result
 
 
 def _merge_whisper_diarization(path, model_size, diarization):
