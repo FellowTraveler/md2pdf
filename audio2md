@@ -4,7 +4,9 @@
 exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
 '''
 
+import datetime
 import os
+import pathlib
 import sys
 from datetime import date
 from pathlib import Path
@@ -76,6 +78,103 @@ def build_markdown_whisper_only(path, segments, duration, model_size):
     return "\n".join(lines)
 
 
+def build_markdown_diarized(path, speaker_segments, duration, method):
+    filename = pathlib.Path(path).name
+    date_str = datetime.date.today().isoformat()
+    duration_str = fmt_duration(duration)
+
+    header = f"""# Transcript: {filename}
+
+**Date:** {date_str}
+**Duration:** {duration_str}
+**Transcribed by:** {method}
+
+---
+
+"""
+    speakers = {s for s, _, _, _ in speaker_segments}
+    if len(speakers) <= 1:
+        text = " ".join(t for _, _, _, t in speaker_segments if t.strip())
+        return header + text + "\n"
+
+    lines = []
+    for speaker, start, end, text in speaker_segments:
+        text = text.strip()
+        if not text:
+            continue
+        lines.append(f"**[{speaker}]** `{fmt_ts(start)}`\n\n{text}")
+
+    return header + "\n\n".join(lines) + "\n"
+
+
+def transcribe_elevenlabs(path):
+    from elevenlabs.client import ElevenLabs
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
+    client = ElevenLabs(api_key=api_key)
+    with open(path, "rb") as f:
+        result = client.speech_to_text.convert(
+            file=f,
+            model_id="scribe_v1",
+            diarize=True,
+            timestamps_granularity="segment",
+        )
+    segments = []
+    cur_spk, cur_start, cur_end, cur_text = None, 0.0, 0.0, ""
+    for word in (result.words or []):
+        spk = getattr(word, "speaker_id", None) or "Speaker A"
+        if spk != cur_spk:
+            if cur_text.strip():
+                segments.append((cur_spk, cur_start, cur_end, cur_text.strip()))
+            cur_spk, cur_start, cur_end, cur_text = spk, float(word.start), float(word.end), word.text
+        else:
+            cur_end = float(word.end)
+            cur_text += " " + word.text
+    if cur_text.strip():
+        segments.append((cur_spk, cur_start, cur_end, cur_text.strip()))
+    duration = float(result.words[-1].end) if result.words else 0.0
+    return segments, duration
+
+
+def transcribe_whisper_pyannote(path, model_size):
+    from faster_whisper import WhisperModel
+    from pyannote.audio import Pipeline
+
+    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
+    model = WhisperModel(model_size, device="auto", compute_type="auto")
+    whisper_segs, info = model.transcribe(str(path), beam_size=5, word_timestamps=True)
+    whisper_segs = list(whisper_segs)
+
+    pipeline = Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=hf_token,
+    )
+    diarization = pipeline(str(path))
+
+    def speaker_at(t):
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            if turn.start <= t <= turn.end:
+                return speaker
+        return "Speaker A"
+
+    segments = []
+    cur_spk, cur_start, cur_end, cur_text = None, 0.0, 0.0, ""
+    for seg in whisper_segs:
+        for word in (seg.words or []):
+            mid = (word.start + word.end) / 2.0
+            spk = speaker_at(mid)
+            if spk != cur_spk:
+                if cur_text.strip():
+                    segments.append((cur_spk, cur_start, cur_end, cur_text.strip()))
+                cur_spk, cur_start, cur_end, cur_text = spk, word.start, word.end, word.text
+            else:
+                cur_end = word.end
+                cur_text += " " + word.text
+    if cur_text.strip():
+        segments.append((cur_spk, cur_start, cur_end, cur_text.strip()))
+
+    return segments, info.duration
+
+
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() not in SUPPORTED:
@@ -85,23 +184,35 @@ def process_file(path):
     out_path = p.with_suffix(".md")
     print(f"Transcribing: {p.name} -> {out_path.name}", file=sys.stderr)
 
-    if os.environ.get("ELEVENLABS_API_KEY"):
-        print("Note: ElevenLabs tier not yet implemented, falling through to Whisper.", file=sys.stderr)
-    if os.environ.get("HUGGINGFACE_TOKEN"):
-        print("Note: Pyannote diarization tier not yet implemented, falling through to Whisper.", file=sys.stderr)
-
+    el_key = os.environ.get("ELEVENLABS_API_KEY")
+    hf_token = os.environ.get("HUGGINGFACE_TOKEN")
     model_size = os.environ.get("WHISPER_MODEL", "base")
+
     try:
-        segs, duration = whisper_transcribe(p, model_size)
-        md = build_markdown_whisper_only(p, segs, duration, model_size)
-        out_path.write_text(md, encoding="utf-8")
-        print(f"Saved: {out_path}", file=sys.stderr)
+        if el_key:
+            segs, duration = transcribe_elevenlabs(p)
+            md = build_markdown_diarized(p, segs, duration, "ElevenLabs (scribe_v1)")
+        elif hf_token:
+            try:
+                segs, duration = transcribe_whisper_pyannote(p, model_size)
+                md = build_markdown_diarized(p, segs, duration,
+                                             f"Whisper ({model_size}) + speaker diarization")
+            except Exception as e:
+                print(f"Warning: diarization failed ({e}), falling back to Whisper-only", file=sys.stderr)
+                segs, duration = whisper_transcribe(p, model_size)
+                md = build_markdown_whisper_only(p, segs, duration, model_size)
+        else:
+            segs, duration = whisper_transcribe(p, model_size)
+            md = build_markdown_whisper_only(p, segs, duration, model_size)
     except ImportError as e:
-        print(f"Error: missing dependency — run: ~/.md2pdf-venv/bin/pip install faster-whisper\n({e})", file=sys.stderr)
+        print(f"Error: missing dependency — re-run ./install.sh to repair\n({e})", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"Error transcribing {p.name}: {e}", file=sys.stderr)
         sys.exit(1)
+
+    out_path.write_text(md, encoding="utf-8")
+    print(f"Saved: {out_path}", file=sys.stderr)
 
 
 def main():
