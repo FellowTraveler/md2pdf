@@ -52,35 +52,43 @@ else
     echo "The 'Convert Audio File to Markdown Transcript' Quick Action uses local Whisper by default."
     echo "Optionally add keys below to unlock speaker identification or cloud transcription."
     echo ""
-    echo "  HUGGINGFACE_TOKEN — unlocks speaker identification (who said what)."
-    echo "    1. Create a free account at https://huggingface.co"
-    echo "    2. Get a token at https://huggingface.co/settings/tokens"
-    echo "    3. Accept model terms at https://huggingface.co/pyannote/speaker-diarization-3.1"
-    echo "       (must be logged in to HuggingFace when you click Accept)"
-    echo ""
-    read -p "  HuggingFace token (press Enter to skip): " _HF_TOKEN
-    echo ""
-    echo "  ELEVENLABS_API_KEY — use ElevenLabs cloud transcription instead of local Whisper."
-    echo "    Get a key at https://elevenlabs.io/app/settings/api-keys"
-    echo ""
-    read -p "  ElevenLabs API key (press Enter to skip): " _EL_KEY
-    echo ""
-
-    mkdir -p "$HOME/.config/md2pdf"
-    touch "$HOME/.config/md2pdf/.env"
-    if [[ -n "$_HF_TOKEN" ]]; then
-        sed -i '' '/^HUGGINGFACE_TOKEN=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
-        echo "HUGGINGFACE_TOKEN=${_HF_TOKEN}" >> "$HOME/.config/md2pdf/.env"
-        echo -e "${GREEN}Saved:${NC} HUGGINGFACE_TOKEN -> ~/.config/md2pdf/.env"
-        echo -e "${BLUE}Installing:${NC} pyannote.audio (speaker diarization)"
-        "$HOME/.md2pdf-venv/bin/pip" install --quiet pyannote.audio
+    if [ -t 0 ]; then
+        echo "  HUGGINGFACE_TOKEN — unlocks speaker identification (who said what)."
+        echo "    1. Create a free account at https://huggingface.co"
+        echo "    2. Get a token at https://huggingface.co/settings/tokens"
+        echo "    3. Accept model terms at https://huggingface.co/pyannote/speaker-diarization-3.1"
+        echo "       (must be logged in to HuggingFace when you click Accept)"
         echo ""
-    fi
-    if [[ -n "$_EL_KEY" ]]; then
-        sed -i '' '/^ELEVENLABS_API_KEY=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
-        echo "ELEVENLABS_API_KEY=${_EL_KEY}" >> "$HOME/.config/md2pdf/.env"
-        echo -e "${GREEN}Saved:${NC} ELEVENLABS_API_KEY -> ~/.config/md2pdf/.env"
-        "$HOME/.md2pdf-venv/bin/pip" install --quiet elevenlabs
+        read -p "  HuggingFace token (press Enter to skip): " _HF_TOKEN
+        echo ""
+        echo "  ELEVENLABS_API_KEY — use ElevenLabs cloud transcription instead of local Whisper."
+        echo "    Get a key at https://elevenlabs.io/app/settings/api-keys"
+        echo ""
+        read -p "  ElevenLabs API key (press Enter to skip): " _EL_KEY
+        echo ""
+
+        mkdir -p "$HOME/.config/md2pdf"
+        touch "$HOME/.config/md2pdf/.env"
+        if [[ -n "$_HF_TOKEN" ]]; then
+            sed -i '' '/^HUGGINGFACE_TOKEN=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
+            echo "HUGGINGFACE_TOKEN=${_HF_TOKEN}" >> "$HOME/.config/md2pdf/.env"
+            echo -e "${GREEN}Saved:${NC} HUGGINGFACE_TOKEN -> ~/.config/md2pdf/.env"
+            echo -e "${BLUE}Installing:${NC} pyannote.audio (speaker diarization)"
+            "$HOME/.md2pdf-venv/bin/pip" install --quiet pyannote.audio
+            echo ""
+        fi
+        if [[ -n "$_EL_KEY" ]]; then
+            sed -i '' '/^ELEVENLABS_API_KEY=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
+            echo "ELEVENLABS_API_KEY=${_EL_KEY}" >> "$HOME/.config/md2pdf/.env"
+            echo -e "${GREEN}Saved:${NC} ELEVENLABS_API_KEY -> ~/.config/md2pdf/.env"
+            "$HOME/.md2pdf-venv/bin/pip" install --quiet elevenlabs
+            echo ""
+        fi
+    else
+        echo -e "${YELLOW}Note:${NC} Run ./install.sh from a terminal to configure API keys for audio transcription."
+        echo "  Or add them manually to ~/.config/md2pdf/.env:"
+        echo "    HUGGINGFACE_TOKEN=hf_...   (for speaker identification)"
+        echo "    ELEVENLABS_API_KEY=sk_...  (for ElevenLabs cloud transcription)"
         echo ""
     fi
     echo ""
