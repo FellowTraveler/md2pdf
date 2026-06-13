@@ -1,0 +1,110 @@
+#!/bin/bash
+# -*- mode: python -*-
+''':'
+exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
+'''
+
+import os
+import sys
+from datetime import date
+from pathlib import Path
+
+SUPPORTED = {".aac", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".opus", ".wma"}
+
+
+def load_env():
+    env_path = Path.home() / ".config" / "md2pdf" / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip())
+
+
+def fmt_duration(seconds):
+    seconds = int(seconds)
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+def fmt_ts(seconds):
+    seconds = int(seconds)
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    if h:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def whisper_transcribe(path, model_size="base"):
+    from faster_whisper import WhisperModel
+    model = WhisperModel(model_size, device="auto", compute_type="auto")
+    segments_iter, info = model.transcribe(str(path), beam_size=5, word_timestamps=False)
+    segments = list(segments_iter)
+    return segments, info.duration
+
+
+def build_markdown_whisper_only(path, segments, duration):
+    model_size = os.environ.get("WHISPER_MODEL", "base")
+    name = Path(path).name
+    today = date.today().isoformat()
+    lines = [
+        f"# Transcript: {name}",
+        "",
+        f"**Date:** {today}",
+        f"**Duration:** {fmt_duration(duration)}",
+        f"**Transcribed by:** Whisper ({model_size})",
+        "",
+        "---",
+        "",
+    ]
+    for seg in segments:
+        ts = fmt_ts(seg.start)
+        text = seg.text.strip()
+        if text:
+            lines.append(f"`[{ts}]` {text}")
+            lines.append("")
+    return "\n".join(lines)
+
+
+def process_file(path):
+    p = Path(path)
+    if p.suffix.lower() not in SUPPORTED:
+        print(f"Skipping unsupported file type: {p.name}", file=sys.stderr)
+        return
+
+    out_path = p.with_suffix(".md")
+    print(f"Transcribing: {p.name} -> {out_path.name}", file=sys.stderr)
+
+    if os.environ.get("ELEVENLABS_API_KEY"):
+        print("Note: ElevenLabs tier not yet implemented, falling through to Whisper.", file=sys.stderr)
+    if os.environ.get("HUGGINGFACE_TOKEN"):
+        print("Note: Pyannote diarization tier not yet implemented, falling through to Whisper.", file=sys.stderr)
+
+    model_size = os.environ.get("WHISPER_MODEL", "base")
+    segments, duration = whisper_transcribe(p, model_size)
+    markdown = build_markdown_whisper_only(p, segments, duration)
+    out_path.write_text(markdown, encoding="utf-8")
+    print(f"Written: {out_path}", file=sys.stderr)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"Usage: {Path(sys.argv[0]).name} <audio_file> [...]", file=sys.stderr)
+        sys.exit(1)
+    load_env()
+    for arg in sys.argv[1:]:
+        process_file(arg)
+
+
+if __name__ == "__main__":
+    main()
