@@ -214,10 +214,30 @@ cp "$SCRIPT_DIR/themes/"*.css "$THEME_DIR/"
 SERVICES_DIR="${HOME}/Library/Services"
 mkdir -p "$SERVICES_DIR"
 
-echo -e "${BOLD}Finder Quick Actions${NC}"
-echo "Select which Quick Actions to install as Automator services."
+echo -e "${BOLD}Quick Actions Installation${NC}"
+echo "These actions appear when you right-click a file or folder in Finder."
+echo "They can be installed in two ways — you will be asked which after selecting actions:"
+echo ""
+echo "  Finder Services  Works immediately, no account needed."
+echo "                   Location: right-click → Services → [action name]"
+echo ""
+echo "  Shortcuts App    More prominently placed in Finder's Quick Actions menu."
+echo "                   Requires iCloud sign-in and the Shortcuts app."
+echo "                   Location: right-click → Quick Actions → [action name]"
 echo ""
 
+# Check iCloud/Shortcuts availability upfront so we know which install options to offer
+_CAN_SIGN=false
+if command -v shortcuts &> /dev/null; then
+    _PROBE_TMP=$(mktemp /tmp/probe.XXXXXX.shortcut)
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' \
+        | plutil -convert binary1 - -o "$_PROBE_TMP" 2>/dev/null
+    _SIGN_ERR=$(shortcuts sign -m anyone -i "$_PROBE_TMP" -o /dev/null 2>&1 || true)
+    rm -f "$_PROBE_TMP"
+    echo "$_SIGN_ERR" | grep -qi "icloud" || _CAN_SIGN=true
+fi
+
+# Build list of available workflows (once)
 QA_NAMES=()
 QA_PATHS=()
 i=1
@@ -243,148 +263,91 @@ case "$qa_selection" in
     *)       QA_SELECTED=($qa_selection) ;;
 esac
 
-_need_finder_restart=false
-for num in "${QA_SELECTED[@]}"; do
-    idx=$((num - 1))
-    [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
-    name="${QA_NAMES[$idx]}"
-    workflow="${QA_PATHS[$idx]}"
-    echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
-    rm -rf "$SERVICES_DIR/$name"
-    cp -R "$workflow" "$SERVICES_DIR/$name"
+_install_services=false
+_install_shortcuts=false
 
-    # Register as Quick Action in pbs (pasteboard server) so it appears in Finder context menu
-    service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
-    if [[ -n "$service_name" ]]; then
-        pbs_key="(null) - ${service_name} - runWorkflowAsService"
-        defaults write pbs NSServicesStatus -dict-add \
-            "\"$pbs_key\"" \
-            '{ "presentation_modes" = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 1; }; }'
-    fi
-    _need_finder_restart=true
-done
-
-echo ""
-
-# Restart pasteboard server and Finder so Quick Actions appear immediately
-if [[ "$_need_finder_restart" == "true" ]]; then
-    killall pbs 2>/dev/null || true
-    sleep 1
-    killall Finder 2>/dev/null || true
-fi
-
-echo ""
-echo -e "${GREEN}Installation complete!${NC}"
-echo ""
-
-# Check if ~/bin is in PATH
-if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
-    echo -e "${YELLOW}Note:${NC} Add ~/bin to your PATH to run md2pdf from anywhere:"
+if [[ ${#QA_SELECTED[@]} -gt 0 ]]; then
     echo ""
-    echo "  echo 'export PATH=\"\$HOME/bin:\$PATH\"' >> ~/.zshrc"
-    echo "  source ~/.zshrc"
+    if [[ "$_CAN_SIGN" == "true" ]]; then
+        echo "Install selected actions as:"
+        echo "  [s] Finder Services only  (right-click → Services)"
+        echo "  [q] Shortcuts App only    (right-click → Quick Actions)"
+        echo "  [b] Both                  (default)"
+        read -p "> " _install_type
+        _install_type="${_install_type:-b}"
+        [[ "$_install_type" == "s" || "$_install_type" == "b" ]] && _install_services=true
+        [[ "$_install_type" == "q" || "$_install_type" == "b" ]] && _install_shortcuts=true
+    else
+        echo -e "${YELLOW}Note:${NC} Shortcuts App requires iCloud sign-in — installing as Finder Services only."
+        echo "To also install as Shortcuts later, sign in to iCloud and re-run ./install.sh"
+        _install_services=true
+    fi
     echo ""
 fi
 
-# Install Shortcuts for Finder Quick Actions (modern macOS).
-# Requires iCloud sign-in — macOS refuses to import unsigned shortcut files.
-if command -v shortcuts &> /dev/null; then
-    echo -e "${BOLD}Shortcuts App Integration (optional)${NC}"
-    echo "Adds these actions to the Shortcuts app as Finder Quick Actions."
-    echo "Requires iCloud sign-in — macOS blocks unsigned shortcut files."
-    echo ""
-
-    # Probe whether iCloud signing is available by trying to sign a minimal
-    # binary plist. A format error (iCloud available) won't mention "icloud";
-    # only the actual iCloud-missing error will.
-    _PROBE_TMP=$(mktemp /tmp/probe.XXXXXX.shortcut)
-    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' \
-        | plutil -convert binary1 - -o "$_PROBE_TMP" 2>/dev/null
-    _SIGN_ERR=$(shortcuts sign -m anyone -i "$_PROBE_TMP" -o /dev/null 2>&1 || true)
-    rm -f "$_PROBE_TMP"
-    if echo "$_SIGN_ERR" | grep -qi "icloud"; then
-        _CAN_SIGN=false
-    else
-        _CAN_SIGN=true
-    fi
-
-    if [[ "$_CAN_SIGN" != "true" ]]; then
-        echo -e "${YELLOW}Skipped:${NC} iCloud sign-in required for Shortcuts app integration."
-        echo ""
-        echo "To add shortcuts later: sign in to iCloud (System Settings → Apple Account)"
-        echo "and re-run ./install.sh"
-        echo ""
-        echo "Your Quick Actions are already installed as Automator Services."
-        echo "Access them in Finder → right-click any file or folder → Services."
-    else
-
-    # Build numbered list of available workflows
-    WF_NAMES=()
-    WF_PATHS=()
-    i=1
-    for workflow in "$SCRIPT_DIR/"*.workflow; do
-        [[ -d "$workflow" ]] || continue
-        WF_NAMES+=("$(basename "$workflow" .workflow)")
-        WF_PATHS+=("$workflow")
-        printf "  %2d) %s\n" "$i" "$(basename "$workflow" .workflow)"
-        i=$((i + 1))
+# --- Install as Finder Services ---
+if [[ "$_install_services" == "true" ]]; then
+    _need_finder_restart=false
+    for num in "${QA_SELECTED[@]}"; do
+        idx=$((num - 1))
+        [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
+        name="${QA_NAMES[$idx]}"
+        workflow="${QA_PATHS[$idx]}"
+        echo -e "${BLUE}Installing:${NC} Finder Service -> $SERVICES_DIR/$name"
+        rm -rf "$SERVICES_DIR/$name"
+        cp -R "$workflow" "$SERVICES_DIR/$name"
+        service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
+        if [[ -n "$service_name" ]]; then
+            pbs_key="(null) - ${service_name} - runWorkflowAsService"
+            defaults write pbs NSServicesStatus -dict-add \
+                "\"$pbs_key\"" \
+                '{ "presentation_modes" = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 1; }; }'
+        fi
+        _need_finder_restart=true
     done
-
+    if [[ "$_need_finder_restart" == "true" ]]; then
+        killall pbs 2>/dev/null || true
+        sleep 1
+        killall Finder 2>/dev/null || true
+    fi
     echo ""
-    echo "Enter numbers to install (e.g., 1 3 7), 'all', or 'none' to skip:"
-    read -p "> " selection
+fi
 
-    SELECTED=()
-    case "$selection" in
-        none|"") ;;
-        all)     SELECTED=($(seq 1 ${#WF_NAMES[@]})) ;;
-        *)       SELECTED=($selection) ;;
-    esac
+# --- Install as Shortcuts App ---
+if [[ "$_install_shortcuts" == "true" ]]; then
+    SHORTCUTS_TMP=$(mktemp -d)
+    for num in "${QA_SELECTED[@]}"; do
+        idx=$((num - 1))
+        [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
+        workflow="${QA_PATHS[$idx]}"
+        wf_name="${QA_NAMES[$idx]%.workflow}"
 
-    if [[ ${#SELECTED[@]} -gt 0 ]]; then
-        SHORTCUTS_TMP=$(mktemp -d)
-        echo ""
+        cmd=$(/usr/libexec/PlistBuddy -c "Print :actions:0:action:ActionParameters:COMMAND_STRING" \
+            "$workflow/Contents/document.wflow" 2>/dev/null)
+        input_type=$(/usr/libexec/PlistBuddy -c "Print :workflowMetaData:serviceInputTypeIdentifier" \
+            "$workflow/Contents/document.wflow" 2>/dev/null)
+        [[ -z "$cmd" ]] && continue
 
-        for num in "${SELECTED[@]}"; do
-            idx=$((num - 1))
-            [[ $idx -lt 0 || $idx -ge ${#WF_NAMES[@]} ]] && continue
-
-            workflow="${WF_PATHS[$idx]}"
-            wf_name="${WF_NAMES[$idx]}"
-
-            # Extract shell command and input type from Automator workflow
-            cmd=$(/usr/libexec/PlistBuddy -c "Print :actions:0:action:ActionParameters:COMMAND_STRING" \
-                "$workflow/Contents/document.wflow" 2>/dev/null)
-            input_type=$(/usr/libexec/PlistBuddy -c "Print :workflowMetaData:serviceInputTypeIdentifier" \
-                "$workflow/Contents/document.wflow" 2>/dev/null)
-            [[ -z "$cmd" ]] && continue
-
-            # Read Shortcuts content item classes from Info.plist (if specified)
-            input_xml=""
-            i=0
-            while true; do
-                cls=$(/usr/libexec/PlistBuddy -c "Print :ShortcutInputClasses:$i" \
-                    "$workflow/Contents/Info.plist" 2>/dev/null) || break
-                input_xml="${input_xml}<string>${cls}</string>
+        input_xml=""
+        i=0
+        while true; do
+            cls=$(/usr/libexec/PlistBuddy -c "Print :ShortcutInputClasses:$i" \
+                "$workflow/Contents/Info.plist" 2>/dev/null) || break
+            input_xml="${input_xml}<string>${cls}</string>
 		"
-                i=$((i + 1))
-            done
-
-            # Fall back to Automator input type mapping if no ShortcutInputClasses
-            if [[ -z "$input_xml" ]]; then
-                case "$input_type" in
-                    *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
-                    *item*)   input_xml='<string>WFGenericFileContentItem</string>' ;;
-                    *)        input_xml='<string>WFGenericFileContentItem</string>
+            i=$((i + 1))
+        done
+        if [[ -z "$input_xml" ]]; then
+            case "$input_type" in
+                *folder*) input_xml='<string>WFFolderContentItem</string>' ;;
+                *item*)   input_xml='<string>WFGenericFileContentItem</string>' ;;
+                *)        input_xml='<string>WFGenericFileContentItem</string>
 		<string>WFFolderContentItem</string>' ;;
-                esac
-            fi
+            esac
+        fi
 
-            # XML-escape the shell command
-            escaped_cmd=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-
-            # Generate shortcut plist
-            cat > "$SHORTCUTS_TMP/shortcut.plist" << SHORTCUT_EOF
+        escaped_cmd=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+        cat > "$SHORTCUTS_TMP/shortcut.plist" << SHORTCUT_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -426,27 +389,22 @@ if command -v shortcuts &> /dev/null; then
 </plist>
 SHORTCUT_EOF
 
-            # Convert to binary plist and sign (iCloud confirmed available above)
-            plutil -convert binary1 "$SHORTCUTS_TMP/shortcut.plist" \
-                -o "$SHORTCUTS_TMP/unsigned.shortcut"
-            if shortcuts sign -m anyone \
-                -i "$SHORTCUTS_TMP/unsigned.shortcut" \
-                -o "$SHORTCUTS_TMP/$wf_name.shortcut" 2>/dev/null; then
-                echo -e "${BLUE}Installing:${NC} Shortcut -> $wf_name"
-                open "$SHORTCUTS_TMP/$wf_name.shortcut"
-                sleep 3
-            else
-                echo -e "${YELLOW}Warning:${NC} Failed to sign shortcut: $wf_name"
-            fi
-        done
-
-        echo ""
-        echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
-        sleep 5
-        rm -rf "$SHORTCUTS_TMP"
-    fi
-
-    fi  # _CAN_SIGN
+        plutil -convert binary1 "$SHORTCUTS_TMP/shortcut.plist" \
+            -o "$SHORTCUTS_TMP/unsigned.shortcut"
+        if shortcuts sign -m anyone \
+            -i "$SHORTCUTS_TMP/unsigned.shortcut" \
+            -o "$SHORTCUTS_TMP/$wf_name.shortcut" 2>/dev/null; then
+            echo -e "${BLUE}Installing:${NC} Shortcut -> $wf_name"
+            open "$SHORTCUTS_TMP/$wf_name.shortcut"
+            sleep 3
+        else
+            echo -e "${YELLOW}Warning:${NC} Failed to sign shortcut: $wf_name"
+        fi
+    done
+    echo ""
+    echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
+    sleep 5
+    rm -rf "$SHORTCUTS_TMP"
 fi
 
 echo ""
