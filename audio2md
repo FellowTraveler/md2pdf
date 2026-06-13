@@ -214,9 +214,11 @@ def process_file(path):
                 segs, duration = whisper_transcribe(p, model_size)
                 md = build_markdown_whisper_only(p, segs, duration, model_size)
     except Exception as e:
-        msg = f"audio2md error: {e}"
-        print(msg, file=sys.stderr)
-        os.system(f'osascript -e \'display notification "{msg}" with title "Transcription Failed"\'')
+        msg = str(e)
+        error_md = f"# Transcription Failed: {p.name}\n\n**Date:** {datetime.date.today().isoformat()}\n\n**Error:**\n\n```\n{msg}\n```\n"
+        out_path.write_text(error_md, encoding="utf-8")
+        print(f"Error transcribing {p.name}: {msg}", file=sys.stderr)
+        os.system(f'osascript -e \'display notification "See {out_path.name} for details" with title "Transcription Failed"\'')
         sys.exit(1)
 
     out_path.write_text(md, encoding="utf-8")
