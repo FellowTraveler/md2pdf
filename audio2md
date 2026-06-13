@@ -185,8 +185,7 @@ def process_file(path):
     out_path = p.with_suffix(".md")
     print(f"Transcribing: {p.name} -> {out_path.name}", file=sys.stderr)
 
-    provider = os.environ.get("AUDIO2MD_PROVIDER", "").lower()
-    el_key = os.environ.get("ELEVENLABS_API_KEY") if provider == "elevenlabs" else None
+    el_key = os.environ.get("ELEVENLABS_API_KEY")
     hf_token = os.environ.get("HUGGINGFACE_TOKEN")
     model_size = os.environ.get("WHISPER_MODEL", "base")
 
