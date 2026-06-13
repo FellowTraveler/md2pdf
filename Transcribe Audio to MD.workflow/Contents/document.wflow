@@ -85,7 +85,7 @@ audio2md "$@"</string>
 				<key>Class Name</key>
 				<string>RunShellScriptAction</string>
 				<key>InputUUID</key>
-				<string>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</string>
+				<string>3C54015A-AF67-43DA-B046-D5F91790BAAB</string>
 				<key>Keywords</key>
 				<array>
 					<string>Shell</string>
@@ -95,9 +95,9 @@ audio2md "$@"</string>
 					<string>Unix</string>
 				</array>
 				<key>OutputUUID</key>
-				<string>B2C3D4E5-F6A7-8901-BCDE-F12345678901</string>
+				<string>F5D410F4-1A3E-458E-9257-00510F02C0C5</string>
 				<key>UUID</key>
-				<string>C3D4E5F6-A7B8-9012-CDEF-123456789012</string>
+				<string>FB68B211-A362-45A8-B20B-63BB8EDDA140</string>
 				<key>UnlocalizedApplications</key>
 				<array>
 					<string>Automator</string>
@@ -159,7 +159,7 @@ audio2md "$@"</string>
 					<key>4</key>
 					<dict>
 						<key>default value</key>
-						<string>/bin/sh</string>
+						<string>/bin/zsh</string>
 						<key>name</key>
 						<string>shell</string>
 						<key>required</key>
