@@ -180,31 +180,37 @@ Without the API key, pdf2md still works — you just get the raw OCR output with
 
 Right-click any audio file in Finder → Quick Actions → **Convert Audio File to Markdown Transcript**
 
-Transcribes the audio and saves a `.md` file with the same name next to the original. Select multiple files to batch-transcribe.
+Transcribes the audio and saves a `.md` file with the same name next to the original. Select multiple files to batch-transcribe. **No API keys or accounts required** — works out of the box using a local Whisper model.
 
 **Supported formats:** `.aac`, `.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.opus`, `.wma`, `.caf`
 
-### Output quality tiers
+### How it works
 
-| What you have | Output |
+Whisper always runs locally first. If you've set up optional keys, speaker detection runs locally via pyannote — and ElevenLabs is only called if multiple speakers are found. Single-speaker recordings always produce clean raw prose.
+
+| Setup | What you get |
 |---|---|
-| Nothing (default) | Timestamped raw transcript via local Whisper |
-| `HUGGINGFACE_TOKEN` | Per-speaker labeled transcript (who said what) |
-| `ELEVENLABS_API_KEY` | Cloud transcription via ElevenLabs (overrides local) |
+| Nothing (default) | Raw transcript via local Whisper — no signup, no cost |
+| `HUGGINGFACE_TOKEN` | Automatic speaker identification, still fully local |
+| `HUGGINGFACE_TOKEN` + `ELEVENLABS_API_KEY` | ElevenLabs used only when multiple speakers are detected |
 
-Single-speaker recordings produce clean raw text with no timestamps or labels.
+### Optional: speaker identification
 
-### Setting up speaker identification (optional)
+Skip this if you just want a plain transcript. Only needed if you record conversations with multiple people and want them labeled by speaker.
 
 1. Create a free account at [huggingface.co](https://huggingface.co)
-2. Generate a token at <https://huggingface.co/settings/tokens>
-3. Accept the model terms at <https://huggingface.co/pyannote/speaker-diarization-3.1> (while signed in to HuggingFace)
+2. Get a token at <https://huggingface.co/settings/tokens>
+3. Accept model terms (while signed in) at:
+   - <https://huggingface.co/pyannote/speaker-diarization-3.1>
+   - <https://huggingface.co/pyannote/segmentation-3.0>
 4. Add to `~/.config/md2pdf/.env`:
    ```
    HUGGINGFACE_TOKEN=hf_your_token_here
    ```
 
-### Setting up ElevenLabs cloud transcription (optional)
+### Optional: ElevenLabs cloud transcription
+
+Skip this unless you want higher-quality transcription on multi-speaker recordings. ElevenLabs is never called for single-speaker audio.
 
 1. Create an account at [elevenlabs.io](https://elevenlabs.io)
 2. Get your API key at <https://elevenlabs.io/app/settings/api-keys>
@@ -212,8 +218,6 @@ Single-speaker recordings produce clean raw text with no timestamps or labels.
    ```
    ELEVENLABS_API_KEY=sk_your_key_here
    ```
-
-When `ELEVENLABS_API_KEY` is set, it takes priority over local Whisper.
 
 ## Finder Quick Actions
 
