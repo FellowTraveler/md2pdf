@@ -217,28 +217,65 @@ cp "$SCRIPT_DIR/themes/"*.css "$THEME_DIR/"
 # Install Finder Quick Actions
 SERVICES_DIR="${HOME}/Library/Services"
 mkdir -p "$SERVICES_DIR"
-for workflow in "$SCRIPT_DIR/"*.workflow; do
-    if [[ -d "$workflow" ]]; then
-        name="$(basename "$workflow")"
-        echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
-        rm -rf "$SERVICES_DIR/$name"
-        cp -R "$workflow" "$SERVICES_DIR/$name"
 
-        # Register as Quick Action in pbs (pasteboard server) so it appears in Finder context menu
-        service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
-        if [[ -n "$service_name" ]]; then
-            pbs_key="(null) - ${service_name} - runWorkflowAsService"
-            defaults write pbs NSServicesStatus -dict-add \
-                "\"$pbs_key\"" \
-                '{ "presentation_modes" = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 1; }; }'
-        fi
-    fi
+echo -e "${BOLD}Finder Quick Actions${NC}"
+echo "Select which Quick Actions to install as Automator services."
+echo ""
+
+QA_NAMES=()
+QA_PATHS=()
+i=1
+for workflow in "$SCRIPT_DIR/"*.workflow; do
+    [[ -d "$workflow" ]] || continue
+    wf_display="$(basename "$workflow" .workflow)"
+    already=""
+    [[ -d "$SERVICES_DIR/$(basename "$workflow")" ]] && already=" (already installed)"
+    printf "  %2d) %s%s\n" "$i" "$wf_display" "$already"
+    QA_NAMES+=("$(basename "$workflow")")
+    QA_PATHS+=("$workflow")
+    i=$((i + 1))
 done
 
+echo ""
+echo "Enter numbers to install (e.g., 1 3 7), 'all', or 'none' to skip:"
+read -p "> " qa_selection
+
+QA_SELECTED=()
+case "$qa_selection" in
+    none|"") ;;
+    all)     QA_SELECTED=($(seq 1 ${#QA_NAMES[@]})) ;;
+    *)       QA_SELECTED=($qa_selection) ;;
+esac
+
+_need_finder_restart=false
+for num in "${QA_SELECTED[@]}"; do
+    idx=$((num - 1))
+    [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
+    name="${QA_NAMES[$idx]}"
+    workflow="${QA_PATHS[$idx]}"
+    echo -e "${BLUE}Installing:${NC} Quick Action -> $SERVICES_DIR/$name"
+    rm -rf "$SERVICES_DIR/$name"
+    cp -R "$workflow" "$SERVICES_DIR/$name"
+
+    # Register as Quick Action in pbs (pasteboard server) so it appears in Finder context menu
+    service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
+    if [[ -n "$service_name" ]]; then
+        pbs_key="(null) - ${service_name} - runWorkflowAsService"
+        defaults write pbs NSServicesStatus -dict-add \
+            "\"$pbs_key\"" \
+            '{ "presentation_modes" = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 1; }; }'
+    fi
+    _need_finder_restart=true
+done
+
+echo ""
+
 # Restart pasteboard server and Finder so Quick Actions appear immediately
-killall pbs 2>/dev/null || true
-sleep 1
-killall Finder 2>/dev/null || true
+if [[ "$_need_finder_restart" == "true" ]]; then
+    killall pbs 2>/dev/null || true
+    sleep 1
+    killall Finder 2>/dev/null || true
+fi
 
 echo ""
 echo -e "${GREEN}Installation complete!${NC}"
