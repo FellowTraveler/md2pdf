@@ -22,7 +22,8 @@ def load_env():
             continue
         if "=" in line:
             key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+            v = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key.strip(), v)
 
 
 def fmt_duration(seconds):
@@ -53,8 +54,7 @@ def whisper_transcribe(path, model_size="base"):
     return segments, info.duration
 
 
-def build_markdown_whisper_only(path, segments, duration):
-    model_size = os.environ.get("WHISPER_MODEL", "base")
+def build_markdown_whisper_only(path, segments, duration, model_size):
     name = Path(path).name
     today = date.today().isoformat()
     lines = [
@@ -91,10 +91,17 @@ def process_file(path):
         print("Note: Pyannote diarization tier not yet implemented, falling through to Whisper.", file=sys.stderr)
 
     model_size = os.environ.get("WHISPER_MODEL", "base")
-    segments, duration = whisper_transcribe(p, model_size)
-    markdown = build_markdown_whisper_only(p, segments, duration)
-    out_path.write_text(markdown, encoding="utf-8")
-    print(f"Written: {out_path}", file=sys.stderr)
+    try:
+        segs, duration = whisper_transcribe(p, model_size)
+        md = build_markdown_whisper_only(p, segs, duration, model_size)
+        out_path.write_text(md, encoding="utf-8")
+        print(f"Saved: {out_path}", file=sys.stderr)
+    except ImportError as e:
+        print(f"Error: missing dependency — run: ~/.md2pdf-venv/bin/pip install faster-whisper\n({e})", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error transcribing {p.name}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
