@@ -44,7 +44,7 @@ else
     echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv"
     python3 -m venv "$HOME/.md2pdf-venv"
     "$HOME/.md2pdf-venv/bin/pip" install --quiet --upgrade \
-        pymupdf4llm pytesseract Pillow anthropic openai faster-whisper
+        pymupdf4llm pytesseract Pillow anthropic openai faster-whisper pyannote.audio elevenlabs
     echo ""
 
     # --- Audio transcription keys (optional) ---
@@ -73,16 +73,11 @@ else
             sed -i '' '/^HUGGINGFACE_TOKEN=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
             echo "HUGGINGFACE_TOKEN=${_HF_TOKEN}" >> "$HOME/.config/md2pdf/.env"
             echo -e "${GREEN}Saved:${NC} HUGGINGFACE_TOKEN -> ~/.config/md2pdf/.env"
-            echo -e "${BLUE}Installing:${NC} pyannote.audio (speaker diarization)"
-            "$HOME/.md2pdf-venv/bin/pip" install --quiet pyannote.audio
-            echo ""
         fi
         if [[ -n "$_EL_KEY" ]]; then
             sed -i '' '/^ELEVENLABS_API_KEY=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
             echo "ELEVENLABS_API_KEY=${_EL_KEY}" >> "$HOME/.config/md2pdf/.env"
             echo -e "${GREEN}Saved:${NC} ELEVENLABS_API_KEY -> ~/.config/md2pdf/.env"
-            "$HOME/.md2pdf-venv/bin/pip" install --quiet elevenlabs
-            echo ""
         fi
     else
         echo -e "${YELLOW}Note:${NC} Run ./install.sh from a terminal to configure API keys for audio transcription."
@@ -91,6 +86,7 @@ else
         echo "    ELEVENLABS_API_KEY=sk_...  (for ElevenLabs cloud transcription)"
         echo ""
     fi
+
     echo ""
 
     # Install LLM helper module (unified Anthropic/OpenAI/OpenRouter interface)
