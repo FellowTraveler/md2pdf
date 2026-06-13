@@ -171,6 +171,13 @@ def vision_complete(image_bytes, media_type, prompt, max_tokens=2048):
 LLM_HELPER_EOF
 fi
 
+# Check for ffmpeg (required for audio transcription of .m4a, .ogg, .opus, .wma files)
+if ! command -v ffmpeg &> /dev/null; then
+    echo -e "${YELLOW}Warning: ffmpeg not found. Audio transcription of .m4a, .ogg, .opus, .wma files requires ffmpeg.${NC}"
+    echo "Install with: brew install ffmpeg"
+    echo ""
+fi
+
 # Check for tesseract (required for OCR of image-based PDFs)
 if ! command -v tesseract &> /dev/null; then
     echo -e "${YELLOW}Installing tesseract (OCR for image-based PDFs)...${NC}"
