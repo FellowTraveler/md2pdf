@@ -19,7 +19,7 @@ echo -e "${BOLD}md2pdf & pdf2md Uninstaller${NC}"
 echo ""
 
 # Remove scripts
-for script in md2pdf pdf2md; do
+for script in md2pdf pdf2md audio2md; do
     if [[ -f "$INSTALL_BIN/$script" ]]; then
         echo -e "${BLUE}Removing:${NC} $INSTALL_BIN/$script"
         rm -f "$INSTALL_BIN/$script"

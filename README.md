@@ -238,19 +238,15 @@ On older macOS, these appear under **Services** in the Finder right-click menu. 
 
 ### Shortcuts Setup (Sequoia+)
 
-After installing Shortcuts, you need to enable script execution:
+After the installer finishes, complete these steps:
 
-1. Open the **Shortcuts** app
-2. Go to **Settings** (Cmd+,) → **Advanced**
-3. Check **Allow Running Scripts**
+1. Open the **Shortcuts** app → **Settings** (Cmd+,) → **Advanced** → check **Allow Running Scripts**
+2. **Restart your Mac** — macOS requires a restart for newly installed shortcuts to appear in Finder's Quick Actions menu
+3. Right-click any file or folder in Finder → **Quick Actions** → **Customize...** → toggle on the actions you want
 
-Then enable each Quick Action in Finder:
+You can safely enable all of them — macOS automatically shows only the relevant shortcuts based on what you right-click (folder-only actions appear for folders, PDF actions appear for PDFs, etc.).
 
-1. Right-click any file or folder in Finder
-2. Go to **Quick Actions** → **Customize...**
-3. Toggle on the actions you want
-
-The first time you run each shortcut from Quick Actions, macOS will ask for permission to run a script. Click **Always Allow** to avoid being asked again.
+The first time you run each shortcut, macOS will ask for permission to run a script. Click **Always Allow** to avoid being asked again.
 
 ### Known Limitations
 

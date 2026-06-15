@@ -346,7 +346,18 @@ if [[ "$_install_shortcuts" == "true" ]]; then
             esac
         fi
 
-        escaped_cmd=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+        # Shortcuts run shell scripts in a sandboxed subprocess that cannot open files
+        # in protected directories (Downloads, Documents, Desktop) even when Finder
+        # passes them via Quick Actions. "Copy File Contents" must use stdin mode so
+        # shortcuts.app reads the file itself (using its Finder-granted permission)
+        # and pipes the content to the script, bypassing the sandbox restriction.
+        if [[ "$wf_name" == "Copy File Contents" ]]; then
+            shortcut_script="cat | pbcopy"
+            shortcut_input_mode="to stdin"
+        else
+            shortcut_script=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            shortcut_input_mode="as arguments"
+        fi
         cat > "$SHORTCUTS_TMP/shortcut.plist" << SHORTCUT_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -377,11 +388,11 @@ if [[ "$_install_shortcuts" == "true" ]]; then
 			<key>WFWorkflowActionParameters</key>
 			<dict>
 				<key>Script</key>
-				<string>${escaped_cmd}</string>
+				<string>${shortcut_script}</string>
 				<key>Shell</key>
 				<string>/bin/bash</string>
 				<key>InputMode</key>
-				<string>as arguments</string>
+				<string>${shortcut_input_mode}</string>
 			</dict>
 		</dict>
 	</array>
@@ -403,6 +414,12 @@ SHORTCUT_EOF
     done
     echo ""
     echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
+    echo ""
+    echo "Next steps after adding all shortcuts:"
+    echo "  1. Shortcuts app -> Settings (Cmd+,) -> Advanced -> check 'Allow Running Scripts'"
+    echo "  2. Restart your Mac (required for shortcuts to appear in Finder)"
+    echo "  3. Right-click any file -> Quick Actions -> Customize... -> toggle on what you want"
+    echo "     (macOS shows only relevant actions per file type, so enabling all is fine)"
     sleep 5
     rm -rf "$SHORTCUTS_TMP"
 fi
