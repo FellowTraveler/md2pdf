@@ -57,7 +57,7 @@ echo ""
 echo -e "${GREEN}Uninstall complete!${NC}"
 echo ""
 
-# Warn about Shortcuts that must be removed manually
+# Handle Shortcuts that must be removed manually
 if command -v shortcuts &> /dev/null; then
     remaining=""
     while IFS= read -r sc; do
@@ -71,8 +71,17 @@ if command -v shortcuts &> /dev/null; then
     done < <(shortcuts list 2>/dev/null)
 
     if [[ -n "$remaining" ]]; then
-        echo -e "${YELLOW}Note:${NC} macOS does not allow removing Shortcuts from the command line."
-        echo "Please delete these manually in the Shortcuts app (Cmd+click to select, then Delete):"
+        echo -e "${YELLOW}Action required:${NC} The following Shortcuts must be deleted manually"
+        echo "(macOS does not allow removing Shortcuts from the command line):"
+        echo ""
         echo -e "$remaining"
+        if [ -t 0 ]; then
+            echo "Press Enter to open the Shortcuts app, then Cmd+click each one above and press Delete."
+            read -r
+            open -a Shortcuts
+            echo ""
+            echo "Press Enter once you have deleted the shortcuts listed above."
+            read -r
+        fi
     fi
 fi
