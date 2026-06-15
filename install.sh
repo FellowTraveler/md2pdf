@@ -19,6 +19,14 @@ BOLD='\033[1m'
 echo -e "${BOLD}md2pdf & pdf2md Installer${NC}"
 echo ""
 
+# If already installed, uninstall first to avoid conflicts
+if [[ -f "$INSTALL_BIN/md2pdf" || -d "${HOME}/Library/Services/Convert MD to PDF.workflow" ]]; then
+    echo -e "${YELLOW}Existing installation detected — running uninstall first.${NC}"
+    echo ""
+    bash "$SCRIPT_DIR/uninstall.sh"
+    echo ""
+fi
+
 # Check for Node.js (required for md-to-pdf)
 if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}Warning: Node.js not found. md2pdf requires Node.js to run.${NC}"
