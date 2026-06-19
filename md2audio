@@ -226,7 +226,20 @@ def _tts_elevenlabs(text, voice_id, api_key, out_path):
 
 
 def _tts_macos(text, out_path):
-    raise NotImplementedError("macOS say fallback not yet implemented (Task 6)")
+    if not _has_ffmpeg():
+        error_dialog("ffmpeg is required to save MP3. Install with: brew install ffmpeg")
+        sys.exit(1)
+    with tempfile.NamedTemporaryFile(suffix=".aiff", delete=False) as tmp:
+        aiff_path = tmp.name
+    try:
+        subprocess.run(["say", "-o", aiff_path, text], check=True, capture_output=True)
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", aiff_path,
+             "-codec:a", "libmp3lame", "-qscale:a", "2", str(out_path)],
+            check=True, capture_output=True,
+        )
+    finally:
+        os.unlink(aiff_path)
 
 
 def process_file(path):
