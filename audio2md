@@ -188,7 +188,12 @@ def build_markdown_raw(path, segments, duration, model_size):
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() not in SUPPORTED:
-        print(f"Skipping unsupported file type: {p.name}", file=sys.stderr)
+        os.system(
+            f"osascript -e 'display dialog \"{p.name} is not a supported audio file.\\n\\n"
+            f"Supported formats: {', '.join(sorted(SUPPORTED))}\" "
+            f"with title \"Transcribe Audio to MD\" buttons {{\"OK\"}} "
+            f"default button \"OK\" with icon stop'"
+        )
         return
 
     out_path = p.with_suffix(".md")
