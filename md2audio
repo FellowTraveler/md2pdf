@@ -1,0 +1,59 @@
+#!/bin/bash
+# -*- mode: python -*-
+''':'
+exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
+'''
+
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def load_env():
+    env_path = Path.home() / ".config" / "md2pdf" / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def osascript_run(script):
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    return result.stdout.strip(), result.returncode
+
+
+def error_dialog(message):
+    safe = message.replace('"', '\\"')
+    osascript_run(
+        f'display dialog "{safe}" with title "Create Audio Narration" '
+        f'buttons {{"OK"}} default button "OK" with icon stop'
+    )
+
+
+def process_file(path):
+    p = Path(path)
+    if p.suffix.lower() != ".md":
+        error_dialog("Create Audio Narration only works with Markdown (.md) files.")
+        sys.exit(1)
+    print(f"Processing: {p.name}", file=sys.stderr)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"Usage: {Path(sys.argv[0]).name} <file.md>", file=sys.stderr)
+        sys.exit(1)
+    load_env()
+    for arg in sys.argv[1:]:
+        process_file(arg)
+
+
+if __name__ == "__main__":
+    main()
