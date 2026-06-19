@@ -87,6 +87,38 @@ else
             echo "ELEVENLABS_API_KEY=${_EL_KEY}" >> "$HOME/.config/md2pdf/.env"
             echo -e "${GREEN}Saved:${NC} ELEVENLABS_API_KEY -> ~/.config/md2pdf/.env"
         fi
+        # --- Narration voice selection ---
+        _EL_KEY_ACTIVE="${_EL_KEY:-$(grep '^ELEVENLABS_API_KEY=' "$HOME/.config/md2pdf/.env" 2>/dev/null | cut -d= -f2-)}"
+        if [[ -n "$_EL_KEY_ACTIVE" ]]; then
+            echo ""
+            echo -e "${BOLD}Audio Narration Voice${NC}"
+            echo "Default voice for 'Create Audio Narration' Quick Action:"
+            echo "  1) David       Deep, gravelly (Johnny Cash-like)  [default]"
+            echo "  2) Rachel      Calm, professional"
+            echo "  3) Adam        Masculine, American"
+            echo "  4) Antoni      Warm, conversational"
+            echo "  5) Josh        Young, energetic"
+            echo "  6) Bella       Soft, feminine"
+            echo "  7) Custom      Enter a voice ID manually"
+            echo ""
+            read -p "  Select voice [1]: " _VOICE_CHOICE
+            _VOICE_CHOICE="${_VOICE_CHOICE:-1}"
+            case "$_VOICE_CHOICE" in
+                1) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
+                2) _VOICE_ID="21m00Tcm4TlvDq8ikWAM" ;;
+                3) _VOICE_ID="pNInz6obpgDQGcFmaJgB" ;;
+                4) _VOICE_ID="ErXwobaYiN019PkySvjV" ;;
+                5) _VOICE_ID="TxGEqnHWrfWFTfGW9XjX" ;;
+                6) _VOICE_ID="EXAVITQu4vr4xnSDxMaL" ;;
+                7) read -p "  Voice ID: " _VOICE_ID ;;
+                *) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
+            esac
+            if [[ -n "$_VOICE_ID" ]]; then
+                sed -i '' '/^ELEVENLABS_VOICE_ID=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
+                echo "ELEVENLABS_VOICE_ID=${_VOICE_ID}" >> "$HOME/.config/md2pdf/.env"
+                echo -e "${GREEN}Saved:${NC} ELEVENLABS_VOICE_ID -> ~/.config/md2pdf/.env"
+            fi
+        fi
     else
         echo -e "${YELLOW}Note:${NC} Run ./install.sh from a terminal to configure API keys for audio transcription."
         echo "  Or add them manually to ~/.config/md2pdf/.env:"
@@ -212,6 +244,10 @@ chmod +x "$INSTALL_BIN/pdf2md"
 echo -e "${BLUE}Installing:${NC} audio2md -> $INSTALL_BIN/audio2md"
 cp "$SCRIPT_DIR/audio2md" "$INSTALL_BIN/audio2md"
 chmod +x "$INSTALL_BIN/audio2md"
+
+echo -e "${BLUE}Installing:${NC} md2audio -> $INSTALL_BIN/md2audio"
+cp "$SCRIPT_DIR/md2audio" "$INSTALL_BIN/md2audio"
+chmod +x "$INSTALL_BIN/md2audio"
 
 # Install themes
 echo -e "${BLUE}Installing:${NC} themes -> $THEME_DIR/"
