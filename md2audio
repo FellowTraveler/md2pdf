@@ -38,12 +38,40 @@ def error_dialog(message):
     )
 
 
+def choose_from_list(title, prompt, items, default=None):
+    items_str = ", ".join(f'"{item}"' for item in items)
+    default_str = f' default items {{"{default}"}}' if default else ""
+    script = (
+        f'choose from list {{{items_str}}} '
+        f'with title "{title}" with prompt "{prompt}"{default_str}'
+    )
+    out, code = osascript_run(script)
+    if code != 0 or out == "false":
+        return None
+    return out
+
+
+def choose_mode():
+    options = [
+        "Exact transcript — narrate word for word",
+        "Summary narration — AI condenses key points first",
+    ]
+    chosen = choose_from_list(
+        "Create Audio Narration", "Choose narration style:", options, options[0]
+    )
+    if chosen is None:
+        sys.exit(0)
+    return "summary" if chosen.startswith("Summary") else "exact"
+
+
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() != ".md":
         error_dialog("Create Audio Narration only works with Markdown (.md) files.")
         sys.exit(1)
     print(f"Processing: {p.name}", file=sys.stderr)
+    mode = choose_mode()
+    print(f"Mode: {mode}", file=sys.stderr)
 
 
 def main():
