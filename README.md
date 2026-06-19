@@ -219,6 +219,43 @@ Skip this unless you want higher-quality transcription on multi-speaker recordin
    ELEVENLABS_API_KEY=sk_your_key_here
    ```
 
+## Create Audio Narration
+
+Right-click any `.md` file in Finder → Quick Actions → **Create Audio Narration**
+
+Converts a Markdown file to an MP3 audio narration saved next to the original. Works out of the box using the macOS system voice — no API keys required.
+
+**Supported input:** `.md` files only. Running on other file types shows an error dialog.
+
+### How it works
+
+Each time you run the action, two dialogs appear:
+
+1. **Narration style** — Choose between:
+   - *Exact transcript* — narrates the document word for word (markdown formatting stripped)
+   - *Summary narration* — uses an LLM to condense the document before narrating (requires an LLM API key)
+
+2. **Voice** — Choose from a curated list of ElevenLabs voices, macOS system voice, or search ElevenLabs for any voice by name
+
+Output is saved as `<filename>.mp3` next to the source file.
+
+### Optional: ElevenLabs TTS
+
+For higher-quality narration, add an ElevenLabs API key:
+
+1. Get a key at <https://elevenlabs.io/app/settings/api-keys>
+2. Add to `~/.config/md2pdf/.env`:
+   ```
+   ELEVENLABS_API_KEY=sk_your_key_here
+   ELEVENLABS_VOICE_ID=0hh7H4ZVAtaGpm1VZyEN   # David (default)
+   ```
+
+Or re-run `./install.sh` to configure interactively.
+
+### Long documents
+
+Long Markdown files are automatically split into chunks and concatenated — no manual splitting needed. Requires `ffmpeg` (`brew install ffmpeg`).
+
 ## Finder Quick Actions
 
 The installer adds right-click context menu actions for macOS Finder:
@@ -233,6 +270,7 @@ The installer adds right-click context menu actions for macOS Finder:
 - **Open Folder with Cursor** — Open a folder in Cursor
 - **Open Folder with Windsurf** — Open a folder in Windsurf
 - **Open Folder with Fork** — Open a folder in Fork (git client)
+- **Create Audio Narration** — Right-click any `.md` file to generate an MP3 narration. Uses ElevenLabs TTS if an API key is configured, or macOS system voice as a local fallback.
 
 On older macOS, these appear under **Services** in the Finder right-click menu. On modern macOS (Sequoia+), the installer offers to install them as **Shortcuts**, which appear under **Quick Actions** in the right-click menu. You can selectively choose which actions to install.
 
