@@ -11,6 +11,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+CURATED_VOICES = [
+    ("David (default) — Deep, gravelly", "0hh7H4ZVAtaGpm1VZyEN"),
+    ("Rachel — Calm, professional",       "21m00Tcm4TlvDq8ikWAM"),
+    ("Adam — Masculine, American",        "pNInz6obpgDQGcFmaJgB"),
+    ("Antoni — Warm, conversational",     "ErXwobaYiN019PkySvjV"),
+    ("Josh — Young, energetic",           "TxGEqnHWrfWFTfGW9XjX"),
+    ("Bella — Soft, feminine",            "EXAVITQu4vr4xnSDxMaL"),
+]
+
 
 def load_env():
     env_path = Path.home() / ".config" / "md2pdf" / ".env"
@@ -64,6 +73,69 @@ def choose_mode():
     return "summary" if chosen.startswith("Summary") else "exact"
 
 
+def _search_elevenlabs_voice(api_key):
+    script = (
+        'display dialog "Search ElevenLabs voices:" with title "Voice Search" '
+        'default answer "" buttons {"Cancel", "Search"} default button "Search"'
+    )
+    out, code = osascript_run(script)
+    if code != 0 or "Cancel" in out:
+        sys.exit(0)
+    query = ""
+    for part in out.split(", "):
+        if part.startswith("text returned:"):
+            query = part[len("text returned:"):]
+    if not query:
+        sys.exit(0)
+
+    from elevenlabs.client import ElevenLabs
+    client = ElevenLabs(api_key=api_key)
+    all_voices = client.voices.get_all().voices
+    matches = [v for v in all_voices if query.lower() in v.name.lower()][:20]
+    if not matches:
+        error_dialog(f"No voices found for '{query}'.")
+        sys.exit(1)
+
+    labels = [f"{v.name}" for v in matches]
+    chosen = choose_from_list("Voice Search Results", f"Results for '{query}':", labels)
+    if chosen is None:
+        sys.exit(0)
+    idx = labels.index(chosen)
+    return "elevenlabs", matches[idx].voice_id
+
+
+def choose_voice():
+    el_key = os.environ.get("ELEVENLABS_API_KEY")
+    default_voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "0hh7H4ZVAtaGpm1VZyEN")
+    default_label = next(
+        (label for label, vid in CURATED_VOICES if vid == default_voice_id),
+        CURATED_VOICES[0][0],
+    )
+
+    options = [label for label, _ in CURATED_VOICES]
+    options.append("macOS system voice — Local, no API key needed")
+    if el_key:
+        options.append("Search ElevenLabs… — Find any voice by name")
+
+    chosen = choose_from_list(
+        "Create Audio Narration", "Choose a voice:", options, default_label
+    )
+    if chosen is None:
+        sys.exit(0)
+
+    if "macOS system voice" in chosen:
+        return "macos", None
+    if "Search ElevenLabs" in chosen:
+        if not el_key:
+            error_dialog("ElevenLabs API key required to search voices.")
+            sys.exit(1)
+        return _search_elevenlabs_voice(el_key)
+    for label, vid in CURATED_VOICES:
+        if label == chosen:
+            return "elevenlabs", vid
+    return "elevenlabs", default_voice_id
+
+
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() != ".md":
@@ -71,7 +143,8 @@ def process_file(path):
         sys.exit(1)
     print(f"Processing: {p.name}", file=sys.stderr)
     mode = choose_mode()
-    print(f"Mode: {mode}", file=sys.stderr)
+    provider, voice_id = choose_voice()
+    print(f"Mode: {mode}, Provider: {provider}, Voice: {voice_id}", file=sys.stderr)
 
 
 def main():
