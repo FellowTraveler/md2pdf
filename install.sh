@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_BIN="${HOME}/bin"
 THEME_DIR="${HOME}/.md2pdf-themes"
 
-# Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
@@ -27,110 +26,186 @@ if [[ -f "$INSTALL_BIN/md2pdf" || -d "${HOME}/Library/Services/Convert MD to PDF
     echo ""
 fi
 
-# Check for Node.js (required for md-to-pdf)
-if ! command -v node &> /dev/null; then
-    echo -e "${YELLOW}Warning: Node.js not found. md2pdf requires Node.js to run.${NC}"
-    echo "Install Node.js from https://nodejs.org/"
-    echo ""
+# ── Phase 1: Quick Action selection ─────────────────────────────────────────
+
+# Check iCloud/Shortcuts availability upfront
+_CAN_SIGN=false
+if command -v shortcuts &> /dev/null; then
+    _PROBE_TMP=$(mktemp /tmp/probe.XXXXXX.shortcut)
+    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' \
+        | plutil -convert binary1 - -o "$_PROBE_TMP" 2>/dev/null
+    _SIGN_ERR=$(shortcuts sign -m anyone -i "$_PROBE_TMP" -o /dev/null 2>&1 || true)
+    rm -f "$_PROBE_TMP"
+    echo "$_SIGN_ERR" | grep -qi "icloud" || _CAN_SIGN=true
 fi
 
-# Check for Python 3
-if ! command -v python3 &> /dev/null; then
-    echo -e "${YELLOW}Warning: Python 3 not found. pdf2md requires Python 3 to run.${NC}"
-    echo ""
+SERVICES_DIR="${HOME}/Library/Services"
+
+echo -e "${BOLD}Quick Actions${NC}"
+echo "These appear when you right-click a file or folder in Finder."
+echo ""
+
+QA_NAMES=()
+QA_PATHS=()
+i=1
+for workflow in "$SCRIPT_DIR/"*.workflow; do
+    [[ -d "$workflow" ]] || continue
+    wf_display="$(basename "$workflow" .workflow)"
+    already=""
+    [[ -d "$SERVICES_DIR/$(basename "$workflow")" ]] && already=" (already installed)"
+    printf "  %2d) %s%s\n" "$i" "$wf_display" "$already"
+    QA_NAMES+=("$(basename "$workflow")")
+    QA_PATHS+=("$workflow")
+    i=$((i + 1))
+done
+
+echo ""
+QA_SELECTED=()
+if [ -t 0 ]; then
+    echo "Enter numbers to install (e.g., 1 3 7), 'all', or 'none' to skip:"
+    read -p "> " qa_selection
+    case "$qa_selection" in
+        none|"") ;;
+        all)     QA_SELECTED=($(seq 1 ${#QA_NAMES[@]})) ;;
+        *)       QA_SELECTED=($qa_selection) ;;
+    esac
+fi
+
+# Determine which AI features the selected workflows require
+_need_llm=false
+_need_elevenlabs=false
+_need_huggingface=false
+_need_voice=false
+
+for num in "${QA_SELECTED[@]}"; do
+    idx=$((num - 1))
+    [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
+    case "${QA_NAMES[$idx]}" in
+        "Convert PDF to MD.workflow")
+            _need_llm=true ;;
+        "Create Audio Narration.workflow")
+            _need_llm=true; _need_elevenlabs=true; _need_voice=true ;;
+        "Transcribe Audio to MD.workflow")
+            _need_elevenlabs=true; _need_huggingface=true ;;
+    esac
+done
+
+# ── Phase 2: API key prompts (only for needed features) ──────────────────────
+
+_LLM_PROVIDER=""
+_LLM_KEY=""
+_HF_TOKEN=""
+_EL_KEY=""
+_VOICE_ID=""
+
+mkdir -p "$HOME/.config/md2pdf"
+touch "$HOME/.config/md2pdf/.env"
+
+save_key() {  # save_key KEY value
+    sed -i '' "/^${1}=/d" "$HOME/.config/md2pdf/.env" 2>/dev/null || true
+    echo "${1}=${2}" >> "$HOME/.config/md2pdf/.env"
+    echo -e "${GREEN}Saved:${NC} ${1} -> ~/.config/md2pdf/.env"
+}
+
+if [ -t 0 ]; then
+
+    # LLM provider — used by pdf2md (OCR enhancement) and md2audio (text preprocessing)
+    if [[ "$_need_llm" == "true" ]]; then
+        echo ""
+        echo -e "${BOLD}AI Language Model (optional)${NC}"
+        echo "Enhances PDF text recovery and audio narration preprocessing."
+        echo ""
+        echo "  1) Anthropic (Claude)  https://console.anthropic.com/settings/keys"
+        echo "  2) OpenAI (GPT-4o)    https://platform.openai.com/api-keys"
+        echo "  3) Skip"
+        echo ""
+        read -p "  Choose provider [3]: " _LLM_CHOICE
+        _LLM_CHOICE="${_LLM_CHOICE:-3}"
+        case "$_LLM_CHOICE" in
+            1)
+                _LLM_PROVIDER="anthropic"
+                read -p "  Anthropic API key: " _LLM_KEY
+                [[ -n "$_LLM_KEY" ]] && save_key ANTHROPIC_API_KEY "$_LLM_KEY"
+                ;;
+            2)
+                _LLM_PROVIDER="openai"
+                read -p "  OpenAI API key: " _LLM_KEY
+                [[ -n "$_LLM_KEY" ]] && save_key OPENAI_API_KEY "$_LLM_KEY"
+                ;;
+        esac
+        echo ""
+    fi
+
+    if [[ "$_need_huggingface" == "true" ]]; then
+        echo -e "\n${BOLD}Speaker Identification (optional)${NC}"
+        echo "Identifies who is speaking. Free account at https://huggingface.co — get a token"
+        echo "at /settings/tokens and accept terms at /pyannote/speaker-diarization-3.1"
+        read -p "  HuggingFace token (press Enter to skip): " _HF_TOKEN
+        [[ -n "$_HF_TOKEN" ]] && save_key HUGGINGFACE_TOKEN "$_HF_TOKEN"
+        echo ""
+    fi
+
+    if [[ "$_need_elevenlabs" == "true" ]]; then
+        [[ "$_need_voice" == "true" ]] \
+            && echo -e "\n${BOLD}ElevenLabs (required for audio narration)${NC}" \
+            || echo -e "\n${BOLD}ElevenLabs (optional — enables cloud transcription)${NC}"
+        read -p "  Key from https://elevenlabs.io/app/settings/api-keys (Enter to skip): " _EL_KEY
+        [[ -n "$_EL_KEY" ]] && save_key ELEVENLABS_API_KEY "$_EL_KEY"
+        echo ""
+    fi
+
+    _EL_KEY_ACTIVE="${_EL_KEY:-$(grep '^ELEVENLABS_API_KEY=' "$HOME/.config/md2pdf/.env" 2>/dev/null | cut -d= -f2-)}"
+    if [[ "$_need_voice" == "true" && -n "$_EL_KEY_ACTIVE" ]]; then
+        echo -e "${BOLD}Audio Narration Voice${NC}"
+        echo "  1) David (default)  2) Rachel  3) Adam  4) Antoni  5) Josh  6) Bella  7) Custom"
+        read -p "  Select voice [1]: " _VOICE_CHOICE
+        case "${_VOICE_CHOICE:-1}" in
+            1) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
+            2) _VOICE_ID="21m00Tcm4TlvDq8ikWAM" ;;
+            3) _VOICE_ID="pNInz6obpgDQGcFmaJgB" ;;
+            4) _VOICE_ID="ErXwobaYiN019PkySvjV" ;;
+            5) _VOICE_ID="TxGEqnHWrfWFTfGW9XjX" ;;
+            6) _VOICE_ID="EXAVITQu4vr4xnSDxMaL" ;;
+            7) read -p "  Voice ID: " _VOICE_ID ;;
+            *) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
+        esac
+        [[ -n "$_VOICE_ID" ]] && save_key ELEVENLABS_VOICE_ID "$_VOICE_ID"
+        echo ""
+    fi
+
 else
-    # Remove any packages previously installed into the system Python
-    for pkg in pymupdf4llm pymupdf-layout pytesseract Pillow anthropic; do
+    [[ "$_need_llm" == "true" ]]          && echo -e "${YELLOW}Note:${NC} Add ANTHROPIC_API_KEY or OPENAI_API_KEY to ~/.config/md2pdf/.env"
+    [[ "$_need_huggingface" == "true" ]]  && echo -e "${YELLOW}Note:${NC} Add HUGGINGFACE_TOKEN to ~/.config/md2pdf/.env for speaker identification"
+    [[ "$_need_elevenlabs" == "true" ]]   && echo -e "${YELLOW}Note:${NC} Add ELEVENLABS_API_KEY to ~/.config/md2pdf/.env for transcription/narration"
+fi
+
+# ── System setup ─────────────────────────────────────────────────────────────
+
+if ! command -v node &> /dev/null; then
+    echo -e "${YELLOW}Warning: Node.js not found. md2pdf requires Node.js (https://nodejs.org/)${NC}"
+fi
+
+if command -v python3 &> /dev/null; then
+    for pkg in pymupdf4llm pymupdf-layout pytesseract Pillow anthropic openai faster-whisper pyannote.audio elevenlabs; do
         if pip3 show "$pkg" &>/dev/null 2>&1; then
             echo -e "${YELLOW}Cleaning up:${NC} removing $pkg from system Python"
             pip3 uninstall --break-system-packages -y "$pkg" 2>/dev/null || true
         fi
     done
 
-    # Create dedicated venv and install all Python dependencies into it.
-    # Using a venv avoids --break-system-packages and works from Finder (absolute path).
     echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv"
     python3 -m venv "$HOME/.md2pdf-venv"
-    "$HOME/.md2pdf-venv/bin/pip" install --quiet --upgrade \
-        pymupdf4llm pytesseract Pillow anthropic openai faster-whisper pyannote.audio elevenlabs
+
+    _PKGS="pymupdf4llm pytesseract Pillow faster-whisper"
+    [[ "$_LLM_PROVIDER" == "anthropic" && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS anthropic"
+    [[ "$_LLM_PROVIDER" == "openai"    && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS openai"
+    [[ -n "$_HF_TOKEN" ]] && _PKGS="$_PKGS pyannote.audio"
+    [[ -n "$_EL_KEY"   ]] && _PKGS="$_PKGS elevenlabs"
+
+    "$HOME/.md2pdf-venv/bin/pip" install --quiet --upgrade $_PKGS
     echo ""
 
-    # --- Audio transcription keys (optional) ---
-    echo -e "${BOLD}Audio Transcription Setup (optional)${NC}"
-    echo "The 'Convert Audio File to Markdown Transcript' Quick Action uses local Whisper by default."
-    echo "Optionally add keys below to unlock speaker identification or cloud transcription."
-    echo ""
-    if [ -t 0 ]; then
-        echo "  HUGGINGFACE_TOKEN — unlocks speaker identification (who said what)."
-        echo "    1. Create a free account at https://huggingface.co"
-        echo "    2. Get a token at https://huggingface.co/settings/tokens"
-        echo "    3. Accept model terms at https://huggingface.co/pyannote/speaker-diarization-3.1"
-        echo "       (must be logged in to HuggingFace when you click Accept)"
-        echo ""
-        read -p "  HuggingFace token (press Enter to skip): " _HF_TOKEN
-        echo ""
-        echo "  ELEVENLABS_API_KEY — use ElevenLabs cloud transcription instead of local Whisper."
-        echo "    Get a key at https://elevenlabs.io/app/settings/api-keys"
-        echo ""
-        read -p "  ElevenLabs API key (press Enter to skip): " _EL_KEY
-        echo ""
-
-        mkdir -p "$HOME/.config/md2pdf"
-        touch "$HOME/.config/md2pdf/.env"
-        if [[ -n "$_HF_TOKEN" ]]; then
-            sed -i '' '/^HUGGINGFACE_TOKEN=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
-            echo "HUGGINGFACE_TOKEN=${_HF_TOKEN}" >> "$HOME/.config/md2pdf/.env"
-            echo -e "${GREEN}Saved:${NC} HUGGINGFACE_TOKEN -> ~/.config/md2pdf/.env"
-        fi
-        if [[ -n "$_EL_KEY" ]]; then
-            sed -i '' '/^ELEVENLABS_API_KEY=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
-            echo "ELEVENLABS_API_KEY=${_EL_KEY}" >> "$HOME/.config/md2pdf/.env"
-            echo -e "${GREEN}Saved:${NC} ELEVENLABS_API_KEY -> ~/.config/md2pdf/.env"
-        fi
-        # --- Narration voice selection ---
-        _EL_KEY_ACTIVE="${_EL_KEY:-$(grep '^ELEVENLABS_API_KEY=' "$HOME/.config/md2pdf/.env" 2>/dev/null | cut -d= -f2-)}"
-        if [[ -n "$_EL_KEY_ACTIVE" ]]; then
-            echo ""
-            echo -e "${BOLD}Audio Narration Voice${NC}"
-            echo "Default voice for 'Create Audio Narration' Quick Action:"
-            echo "  1) David       Deep, gravelly (Johnny Cash-like)  [default]"
-            echo "  2) Rachel      Calm, professional"
-            echo "  3) Adam        Masculine, American"
-            echo "  4) Antoni      Warm, conversational"
-            echo "  5) Josh        Young, energetic"
-            echo "  6) Bella       Soft, feminine"
-            echo "  7) Custom      Enter a voice ID manually"
-            echo ""
-            read -p "  Select voice [1]: " _VOICE_CHOICE
-            _VOICE_CHOICE="${_VOICE_CHOICE:-1}"
-            case "$_VOICE_CHOICE" in
-                1) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
-                2) _VOICE_ID="21m00Tcm4TlvDq8ikWAM" ;;
-                3) _VOICE_ID="pNInz6obpgDQGcFmaJgB" ;;
-                4) _VOICE_ID="ErXwobaYiN019PkySvjV" ;;
-                5) _VOICE_ID="TxGEqnHWrfWFTfGW9XjX" ;;
-                6) _VOICE_ID="EXAVITQu4vr4xnSDxMaL" ;;
-                7) read -p "  Voice ID: " _VOICE_ID ;;
-                *) _VOICE_ID="0hh7H4ZVAtaGpm1VZyEN" ;;
-            esac
-            if [[ -n "$_VOICE_ID" ]]; then
-                sed -i '' '/^ELEVENLABS_VOICE_ID=/d' "$HOME/.config/md2pdf/.env" 2>/dev/null || true
-                echo "ELEVENLABS_VOICE_ID=${_VOICE_ID}" >> "$HOME/.config/md2pdf/.env"
-                echo -e "${GREEN}Saved:${NC} ELEVENLABS_VOICE_ID -> ~/.config/md2pdf/.env"
-            fi
-        fi
-    else
-        echo -e "${YELLOW}Note:${NC} Run ./install.sh from a terminal to configure API keys for audio transcription."
-        echo "  Or add them manually to ~/.config/md2pdf/.env:"
-        echo "    HUGGINGFACE_TOKEN=hf_...   (for speaker identification)"
-        echo "    ELEVENLABS_API_KEY=sk_...  (for ElevenLabs cloud transcription)"
-        echo ""
-    fi
-
-    echo ""
-
-    # Install LLM helper module (unified Anthropic/OpenAI/OpenRouter interface)
-    mkdir -p "$HOME/.config/md2pdf"
+    # llm_helper — always installed; gracefully returns None when no key is set
     cat > "$HOME/.config/md2pdf/llm_helper.py" << 'LLM_HELPER_EOF'
 """Unified LLM interface for md2pdf/pdf2md.
 Provider priority: ANTHROPIC_API_KEY > OPENAI_API_KEY > OPENROUTER_API_KEY
@@ -205,11 +280,15 @@ def vision_complete(image_bytes, media_type, prompt, max_tokens=2048):
         print(f"LLM vision error: {e}", file=sys.stderr)
         return None
 LLM_HELPER_EOF
+
+else
+    echo -e "${YELLOW}Warning: Python 3 not found. pdf2md and audio tools require Python 3.${NC}"
+    echo ""
 fi
 
-# Check for ffmpeg (required for audio transcription of .m4a, .ogg, .opus, .wma files)
+# Check for ffmpeg (required for audio/video transcription)
 if ! command -v ffmpeg &> /dev/null; then
-    echo -e "${YELLOW}Warning: ffmpeg not found. Audio transcription of .m4a, .ogg, .opus, .wma files requires ffmpeg.${NC}"
+    echo -e "${YELLOW}Warning: ffmpeg not found. Audio/video transcription requires ffmpeg.${NC}"
     echo "Install with: brew install ffmpeg"
     echo ""
 fi
@@ -226,91 +305,38 @@ if ! command -v tesseract &> /dev/null; then
     echo ""
 fi
 
-# Create bin directory if needed
+# ── Phase 4: Install scripts and themes ─────────────────────────────────────
+
 if [[ ! -d "$INSTALL_BIN" ]]; then
     echo -e "${BLUE}Creating:${NC} $INSTALL_BIN"
     mkdir -p "$INSTALL_BIN"
 fi
 
-# Install scripts
-echo -e "${BLUE}Installing:${NC} md2pdf -> $INSTALL_BIN/md2pdf"
-cp "$SCRIPT_DIR/md2pdf" "$INSTALL_BIN/md2pdf"
-chmod +x "$INSTALL_BIN/md2pdf"
+for script in md2pdf pdf2md audio2md md2audio; do
+    echo -e "${BLUE}Installing:${NC} $script -> $INSTALL_BIN/$script"
+    cp "$SCRIPT_DIR/$script" "$INSTALL_BIN/$script"
+    chmod +x "$INSTALL_BIN/$script"
+done
 
-echo -e "${BLUE}Installing:${NC} pdf2md -> $INSTALL_BIN/pdf2md"
-cp "$SCRIPT_DIR/pdf2md" "$INSTALL_BIN/pdf2md"
-chmod +x "$INSTALL_BIN/pdf2md"
-
-echo -e "${BLUE}Installing:${NC} audio2md -> $INSTALL_BIN/audio2md"
-cp "$SCRIPT_DIR/audio2md" "$INSTALL_BIN/audio2md"
-chmod +x "$INSTALL_BIN/audio2md"
-
-echo -e "${BLUE}Installing:${NC} md2audio -> $INSTALL_BIN/md2audio"
-cp "$SCRIPT_DIR/md2audio" "$INSTALL_BIN/md2audio"
-chmod +x "$INSTALL_BIN/md2audio"
-
-# Install themes
 echo -e "${BLUE}Installing:${NC} themes -> $THEME_DIR/"
 mkdir -p "$THEME_DIR"
 cp "$SCRIPT_DIR/themes/"*.css "$THEME_DIR/"
 
-# Install Finder Quick Actions
-SERVICES_DIR="${HOME}/Library/Services"
-mkdir -p "$SERVICES_DIR"
-
-echo -e "${BOLD}Quick Actions Installation${NC}"
-echo "These actions appear when you right-click a file or folder in Finder."
-echo "They can be installed in two ways — you will be asked which after selecting actions:"
-echo ""
-echo "  Finder Services  Works immediately, no account needed."
-echo "                   Location: right-click → Services → [action name]"
-echo ""
-echo "  Shortcuts App    More prominently placed in Finder's Quick Actions menu."
-echo "                   Requires iCloud sign-in and the Shortcuts app."
-echo "                   Location: right-click → Quick Actions → [action name]"
-echo ""
-
-# Check iCloud/Shortcuts availability upfront so we know which install options to offer
-_CAN_SIGN=false
-if command -v shortcuts &> /dev/null; then
-    _PROBE_TMP=$(mktemp /tmp/probe.XXXXXX.shortcut)
-    printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' \
-        | plutil -convert binary1 - -o "$_PROBE_TMP" 2>/dev/null
-    _SIGN_ERR=$(shortcuts sign -m anyone -i "$_PROBE_TMP" -o /dev/null 2>&1 || true)
-    rm -f "$_PROBE_TMP"
-    echo "$_SIGN_ERR" | grep -qi "icloud" || _CAN_SIGN=true
-fi
-
-# Build list of available workflows (once)
-QA_NAMES=()
-QA_PATHS=()
-i=1
-for workflow in "$SCRIPT_DIR/"*.workflow; do
-    [[ -d "$workflow" ]] || continue
-    wf_display="$(basename "$workflow" .workflow)"
-    already=""
-    [[ -d "$SERVICES_DIR/$(basename "$workflow")" ]] && already=" (already installed)"
-    printf "  %2d) %s%s\n" "$i" "$wf_display" "$already"
-    QA_NAMES+=("$(basename "$workflow")")
-    QA_PATHS+=("$workflow")
-    i=$((i + 1))
-done
-
-echo ""
-echo "Enter numbers to install (e.g., 1 3 7), 'all', or 'none' to skip:"
-read -p "> " qa_selection
-
-QA_SELECTED=()
-case "$qa_selection" in
-    none|"") ;;
-    all)     QA_SELECTED=($(seq 1 ${#QA_NAMES[@]})) ;;
-    *)       QA_SELECTED=($qa_selection) ;;
-esac
+# ── Phase 5: Install Quick Actions ──────────────────────────────────────────
 
 _install_services=false
 _install_shortcuts=false
 
 if [[ ${#QA_SELECTED[@]} -gt 0 ]]; then
+    echo ""
+    echo -e "${BOLD}Install Method${NC}"
+    echo ""
+    echo "  Finder Services  Works immediately, no account needed."
+    echo "                   Location: right-click → Services → [action name]"
+    echo ""
+    echo "  Shortcuts App    More prominently placed in Finder's Quick Actions menu."
+    echo "                   Requires iCloud sign-in and the Shortcuts app."
+    echo "                   Location: right-click → Quick Actions → [action name]"
     echo ""
     if [[ "$_CAN_SIGN" == "true" ]]; then
         echo "Install selected actions as:"
@@ -331,6 +357,7 @@ fi
 
 # --- Install as Finder Services ---
 if [[ "$_install_services" == "true" ]]; then
+    mkdir -p "$SERVICES_DIR"
     _need_finder_restart=false
     for num in "${QA_SELECTED[@]}"; do
         idx=$((num - 1))
