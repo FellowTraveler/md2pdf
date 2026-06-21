@@ -11,7 +11,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
-SUPPORTED = {".aac", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".opus", ".wma", ".caf"}
+SUPPORTED_AUDIO = {".aac", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".opus", ".wma", ".caf"}
+SUPPORTED_VIDEO = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts"}
+SUPPORTED = SUPPORTED_AUDIO | SUPPORTED_VIDEO
 
 
 def load_env():
@@ -185,16 +187,36 @@ def build_markdown_raw(path, segments, duration, model_size):
             f"**Transcribed by:** Whisper ({model_size})\n\n---\n\n{text}\n")
 
 
+def extract_audio(video_path):
+    import subprocess, tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp.close()
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(video_path), "-vn", "-ac", "1", "-ar", "16000", tmp.name],
+        check=True, capture_output=True,
+    )
+    return Path(tmp.name)
+
+
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() not in SUPPORTED:
         os.system(
-            f"osascript -e 'display dialog \"{p.name} is not a supported audio file.\\n\\n"
+            f"osascript -e 'display dialog \"{p.name} is not a supported file.\\n\\n"
             f"Supported formats: {', '.join(sorted(SUPPORTED))}\" "
-            f"with title \"Transcribe Audio to MD\" buttons {{\"OK\"}} "
+            f"with title \"Transcribe to MD\" buttons {{\"OK\"}} "
             f"default button \"OK\" with icon stop'"
         )
         return
+
+    is_video = p.suffix.lower() in SUPPORTED_VIDEO
+    audio_path = None
+    if is_video:
+        print(f"Extracting audio from: {p.name}", file=sys.stderr)
+        audio_path = extract_audio(p)
+        transcribe_path = audio_path
+    else:
+        transcribe_path = p
 
     out_path = p.with_suffix(".md")
     print(f"Transcribing: {p.name} -> {out_path.name}", file=sys.stderr)
@@ -205,12 +227,12 @@ def process_file(path):
 
     try:
         # Step 1: always run Whisper (fast, local, free)
-        whisper_segs, duration = whisper_transcribe(p, model_size)
+        whisper_segs, duration = whisper_transcribe(transcribe_path, model_size)
 
         # Step 2: if HF token, check speaker count locally before deciding on cloud
         if hf_token:
             try:
-                diarization = _run_pyannote(p, hf_token)
+                diarization = _run_pyannote(transcribe_path, hf_token)
                 n_speakers = len({spk for _, _, spk in diarization.itertracks(yield_label=True)})
             except Exception as e:
                 print(f"Warning: speaker detection failed ({e}), using Whisper-only", file=sys.stderr)
@@ -219,15 +241,15 @@ def process_file(path):
             if n_speakers <= 1:
                 md = build_markdown_raw(p, whisper_segs, duration, model_size)
             elif el_key:
-                segs, dur = transcribe_elevenlabs(p)
+                segs, dur = transcribe_elevenlabs(transcribe_path)
                 md = build_markdown_diarized(p, segs, dur, "ElevenLabs (scribe_v1)")
             else:
-                segs, dur = _merge_whisper_diarization(p, model_size, diarization)
+                segs, dur = _merge_whisper_diarization(transcribe_path, model_size, diarization)
                 md = build_markdown_diarized(p, segs, dur, f"Whisper ({model_size}) + speaker diarization")
 
         elif el_key:
             # No local speaker check available — let ElevenLabs decide
-            segs, dur = transcribe_elevenlabs(p)
+            segs, dur = transcribe_elevenlabs(transcribe_path)
             md = build_markdown_diarized(p, segs, dur, "ElevenLabs (scribe_v1)")
 
         else:
@@ -239,8 +261,12 @@ def process_file(path):
         out_path.write_text(error_md, encoding="utf-8")
         print(f"Error transcribing {p.name}: {msg}", file=sys.stderr)
         os.system(f'osascript -e \'display notification "See {out_path.name} for details" with title "Transcription Failed"\'')
+        if audio_path:
+            audio_path.unlink(missing_ok=True)
         sys.exit(1)
 
+    if audio_path:
+        audio_path.unlink(missing_ok=True)
     out_path.write_text(md, encoding="utf-8")
     os.system(f'osascript -e \'display notification "Saved: {out_path.name}" with title "Transcription Complete"\'')
     print(f"Saved: {out_path}", file=sys.stderr)
