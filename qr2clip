@@ -4,15 +4,82 @@
 exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
 '''
 
+import ctypes
+import importlib.util
 import os
+import subprocess
 import sys
+import tempfile
 
+NOTIFICATION_TITLE = "Decode QR Code"
+PREVIEW_LENGTH = 80
+CAPTURE_SUFFIX = ".png"
+DECODER_MODULE = "zxingcpp"
+
+SCREENCAPTURE_BIN = "/usr/sbin/screencapture"
+PBCOPY_BIN = "/usr/bin/pbcopy"
+OSASCRIPT_BIN = "/usr/bin/osascript"
+OPEN_BIN = "/usr/bin/open"
+COREGRAPHICS_LIB = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+SCREEN_RECORDING_SETTINGS_URL = (
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+)
+# The message and title are passed as argv so untrusted QR text is never parsed as AppleScript.
+NOTIFY_APPLESCRIPT = (
+    "on run argv",
+    "display notification (item 1 of argv) with title (item 2 of argv)",
+    "end run",
+)
+
+MSG_CANCELLED = "Capture cancelled"
+MSG_PERMISSION = "Screen Recording permission needed — opening System Settings"
 MSG_NOT_FOUND = "No QR code found in that selection"
+MSG_COPIED = "QR code copied: {preview}"
+MSG_MISSING_DECODER = "zxing-cpp is not installed — re-run md2pdf's install.sh"
 MSG_NO_SUCH_FILE = "qr2clip: no such file: {path}"
 MSG_CANNOT_READ_IMAGE = "qr2clip: cannot read image: {path}"
 USAGE = """Usage:
   qr2clip            Drag-select a QR code on screen; the payload is copied to the clipboard
   qr2clip <image>    Decode a QR code from an image file and print the payload"""
+
+
+def notify(message):
+    command = [OSASCRIPT_BIN]
+    for line in NOTIFY_APPLESCRIPT:
+        command += ["-e", line]
+    subprocess.run(command + [message, NOTIFICATION_TITLE], check=False)
+
+
+def copy_to_clipboard(text):
+    subprocess.run([PBCOPY_BIN], input=text.encode("utf-8"), check=True)
+
+
+def open_screen_recording_settings():
+    subprocess.run([OPEN_BIN, SCREEN_RECORDING_SETTINGS_URL], check=False)
+
+
+def decoder_available():
+    return importlib.util.find_spec(DECODER_MODULE) is not None
+
+
+def has_screen_capture_access():
+    """Passive Screen Recording (TCC) check; never triggers the system prompt."""
+    core_graphics = ctypes.cdll.LoadLibrary(COREGRAPHICS_LIB)
+    core_graphics.CGPreflightScreenCaptureAccess.restype = ctypes.c_bool
+    return bool(core_graphics.CGPreflightScreenCaptureAccess())
+
+
+def capture_selection(capture_path):
+    """Interactive drag-to-select capture. False means nothing was captured
+    (user pressed Esc, or Screen Recording permission is missing)."""
+    subprocess.run([SCREENCAPTURE_BIN, "-i", capture_path], check=False)
+    return os.path.isfile(capture_path) and os.path.getsize(capture_path) > 0
+
+
+def preview_of(payload):
+    if len(payload) <= PREVIEW_LENGTH:
+        return payload
+    return payload[:PREVIEW_LENGTH] + "…"
 
 
 def decode_qr(image_path):
@@ -39,8 +106,36 @@ def decode_file(image_path):
     return 0
 
 
+def scan_screen():
+    if not decoder_available():
+        notify(MSG_MISSING_DECODER)
+        return 1
+    descriptor, capture_path = tempfile.mkstemp(suffix=CAPTURE_SUFFIX)
+    os.close(descriptor)
+    try:
+        if not capture_selection(capture_path):
+            # An empty capture is a capture failure, never "no QR code found".
+            if has_screen_capture_access():
+                notify(MSG_CANCELLED)
+            else:
+                notify(MSG_PERMISSION)
+                open_screen_recording_settings()
+            return 1
+        payload = decode_qr(capture_path)
+        if payload is None:
+            notify(MSG_NOT_FOUND)
+            return 1
+        copy_to_clipboard(payload)
+        notify(MSG_COPIED.format(preview=preview_of(payload)))
+        return 0
+    finally:
+        os.remove(capture_path)
+
+
 def main():
     arguments = sys.argv[1:]
+    if not arguments:
+        return scan_screen()
     if len(arguments) == 1 and arguments[0] not in ("-h", "--help"):
         return decode_file(arguments[0])
     print(USAGE)
