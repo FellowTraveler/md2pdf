@@ -1,0 +1,51 @@
+#!/bin/bash
+# -*- mode: python -*-
+''':'
+exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
+'''
+
+import os
+import sys
+
+MSG_NOT_FOUND = "No QR code found in that selection"
+MSG_NO_SUCH_FILE = "qr2clip: no such file: {path}"
+MSG_CANNOT_READ_IMAGE = "qr2clip: cannot read image: {path}"
+USAGE = """Usage:
+  qr2clip            Drag-select a QR code on screen; the payload is copied to the clipboard
+  qr2clip <image>    Decode a QR code from an image file and print the payload"""
+
+
+def decode_qr(image_path):
+    """Return the text of the first QR/barcode found in the image, or None."""
+    import zxingcpp
+    from PIL import Image
+    results = zxingcpp.read_barcodes(Image.open(image_path))
+    return results[0].text if results else None
+
+
+def decode_file(image_path):
+    if not os.path.isfile(image_path):
+        print(MSG_NO_SUCH_FILE.format(path=image_path), file=sys.stderr)
+        return 1
+    try:
+        payload = decode_qr(image_path)
+    except OSError:  # PIL.UnidentifiedImageError is an OSError
+        print(MSG_CANNOT_READ_IMAGE.format(path=image_path), file=sys.stderr)
+        return 1
+    if payload is None:
+        print(MSG_NOT_FOUND, file=sys.stderr)
+        return 1
+    print(payload)
+    return 0
+
+
+def main():
+    arguments = sys.argv[1:]
+    if len(arguments) == 1 and arguments[0] not in ("-h", "--help"):
+        return decode_file(arguments[0])
+    print(USAGE)
+    return 0 if arguments in (["-h"], ["--help"]) else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
