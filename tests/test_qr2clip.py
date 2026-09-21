@@ -5,6 +5,7 @@ import io
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -69,6 +70,12 @@ class DecodeFileTests(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("cannot read image", stderr)
 
+    def test_missing_decoder_exits_one_without_traceback(self):
+        with mock.patch.object(qr2clip, "decoder_available", return_value=False):
+            exit_code, _, stderr = self.run_decode_file(FIXTURES_DIR / "qr_plain.png")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("zxing-cpp is not installed", stderr)
+
 
 class ScanScreenTests(unittest.TestCase):
     """The interactive flow with every macOS side effect mocked out."""
@@ -102,7 +109,7 @@ class ScanScreenTests(unittest.TestCase):
     def test_empty_capture_with_access_reports_cancelled(self):
         self.patch("capture_selection", side_effect=self.fake_capture(None))
         self.patch("has_screen_capture_access", return_value=True)
-        self.assertEqual(qr2clip.scan_screen(), 1)
+        self.assertEqual(qr2clip.scan_screen(), 0)
         self.notify.assert_called_once_with(qr2clip.MSG_CANCELLED)
         self.open_settings.assert_not_called()
         self.copy_to_clipboard.assert_not_called()
@@ -111,7 +118,7 @@ class ScanScreenTests(unittest.TestCase):
     def test_empty_capture_without_access_reports_permission(self):
         self.patch("capture_selection", side_effect=self.fake_capture(None))
         self.patch("has_screen_capture_access", return_value=False)
-        self.assertEqual(qr2clip.scan_screen(), 1)
+        self.assertEqual(qr2clip.scan_screen(), 0)
         self.notify.assert_called_once_with(qr2clip.MSG_PERMISSION)
         self.open_settings.assert_called_once_with()
         self.copy_to_clipboard.assert_not_called()
@@ -119,7 +126,7 @@ class ScanScreenTests(unittest.TestCase):
 
     def test_capture_without_qr_reports_not_found(self):
         self.patch("capture_selection", side_effect=self.fake_capture("no_qr.png"))
-        self.assertEqual(qr2clip.scan_screen(), 1)
+        self.assertEqual(qr2clip.scan_screen(), 0)
         self.notify.assert_called_once_with(qr2clip.MSG_NOT_FOUND)
         self.copy_to_clipboard.assert_not_called()
         self.assert_temp_file_removed()
@@ -136,9 +143,36 @@ class ScanScreenTests(unittest.TestCase):
     def test_missing_decoder_reports_before_capturing(self):
         self.patch("decoder_available", return_value=False)
         capture = self.patch("capture_selection")
-        self.assertEqual(qr2clip.scan_screen(), 1)
+        self.assertEqual(qr2clip.scan_screen(), 0)
         self.notify.assert_called_once_with(qr2clip.MSG_MISSING_DECODER)
         capture.assert_not_called()
+
+    def test_capture_file_already_gone_is_not_an_error(self):
+        def capture_that_unlinks(capture_path):
+            self.capture_paths.append(capture_path)
+            os.remove(capture_path)
+            return False
+        self.patch("capture_selection", side_effect=capture_that_unlinks)
+        self.patch("has_screen_capture_access", return_value=True)
+        self.assertEqual(qr2clip.scan_screen(), 0)
+        self.notify.assert_called_once_with(qr2clip.MSG_CANCELLED)
+
+    def test_decode_failure_is_reported_and_cleaned_up(self):
+        self.patch("capture_selection", side_effect=self.fake_capture("qr_plain.png"))
+        self.patch("decode_qr", side_effect=RuntimeError("decoder exploded"))
+        with self.assertRaises(RuntimeError):
+            qr2clip.scan_screen()
+        self.notify.assert_called_once_with(qr2clip.MSG_FAILED.format(error="decoder exploded"))
+        self.copy_to_clipboard.assert_not_called()
+        self.assert_temp_file_removed()
+
+    def test_clipboard_failure_is_reported_not_announced_as_success(self):
+        self.patch("capture_selection", side_effect=self.fake_capture("qr_plain.png"))
+        self.copy_to_clipboard.side_effect = OSError("pbcopy failed")
+        with self.assertRaises(OSError):
+            qr2clip.scan_screen()
+        self.notify.assert_called_once_with(qr2clip.MSG_FAILED.format(error="pbcopy failed"))
+        self.assert_temp_file_removed()
 
     def test_long_payload_preview_is_truncated(self):
         long_payload = "x" * (qr2clip.PREVIEW_LENGTH + 50)
@@ -146,6 +180,71 @@ class ScanScreenTests(unittest.TestCase):
         self.assertTrue(qr2clip.preview_of(long_payload).endswith("…"))
         self.assertEqual(qr2clip.preview_of("short"), "short")
 
+
+HOSTILE_PAYLOAD = 'x" & do shell script "touch /tmp/pwned" & "$(id)`id`'
+
+
+class SideEffectCommandTests(unittest.TestCase):
+    """The real helpers, with only subprocess.run replaced."""
+
+    def setUp(self):
+        patcher = mock.patch.object(qr2clip.subprocess, "run")
+        self.addCleanup(patcher.stop)
+        self.run = patcher.start()
+
+    def test_notify_passes_untrusted_text_as_argument_never_as_script(self):
+        qr2clip.notify(HOSTILE_PAYLOAD)
+        command = self.run.call_args.args[0]
+        self.assertEqual(command[0], qr2clip.OSASCRIPT_BIN)
+        self.assertEqual(command[-2:], [HOSTILE_PAYLOAD, qr2clip.NOTIFICATION_TITLE])
+        script_lines = [command[i + 1] for i, part in enumerate(command[:-2]) if part == "-e"]
+        self.assertEqual(tuple(script_lines), qr2clip.NOTIFY_APPLESCRIPT)
+        self.assertNotIn(HOSTILE_PAYLOAD, " ".join(script_lines))
+
+    def test_clipboard_gets_utf8_bytes_with_an_explicit_utf8_locale(self):
+        qr2clip.copy_to_clipboard("日本語 café")
+        call = self.run.call_args
+        self.assertEqual(call.args[0], [qr2clip.PBCOPY_BIN])
+        self.assertEqual(call.kwargs["input"], "日本語 café".encode("utf-8"))
+        self.assertEqual(call.kwargs["env"]["LC_CTYPE"], qr2clip.CLIPBOARD_LOCALE)
+        self.assertTrue(call.kwargs["check"])
+
+    def test_capture_selection_is_false_for_empty_or_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            empty = os.path.join(directory, "empty.png")
+            open(empty, "wb").close()
+            self.assertFalse(qr2clip.capture_selection(empty))
+            self.assertFalse(qr2clip.capture_selection(os.path.join(directory, "missing.png")))
+        self.assertEqual(self.run.call_args.args[0][:2], [qr2clip.SCREENCAPTURE_BIN, "-i"])
+
+    def test_capture_selection_is_true_for_non_empty_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            captured = os.path.join(directory, "captured.png")
+            shutil.copyfile(FIXTURES_DIR / "qr_plain.png", captured)
+            self.assertTrue(qr2clip.capture_selection(captured))
+
+
+class MainDispatchTests(unittest.TestCase):
+    def run_main(self, *arguments):
+        with mock.patch.object(sys, "argv", ["qr2clip", *arguments]), \
+                mock.patch.object(qr2clip, "scan_screen", return_value=0) as scan, \
+                mock.patch.object(qr2clip, "decode_file", return_value=0) as decode, \
+                contextlib.redirect_stdout(io.StringIO()):
+            return qr2clip.main(), scan, decode
+
+    def test_no_arguments_scans_the_screen(self):
+        _, scan, decode = self.run_main()
+        scan.assert_called_once_with()
+        decode.assert_not_called()
+
+    def test_one_argument_decodes_that_file(self):
+        _, scan, decode = self.run_main("poster.png")
+        decode.assert_called_once_with("poster.png")
+        scan.assert_not_called()
+
+    def test_help_and_bad_usage(self):
+        self.assertEqual(self.run_main("--help")[0], 0)
+        self.assertEqual(self.run_main("a.png", "b.png")[0], 2)
 
 if __name__ == "__main__":
     unittest.main()
