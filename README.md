@@ -273,7 +273,7 @@ qr2clip poster.png     # decode an image file -> stdout
 ### Setup
 
 1. Select **Decode QR Code On Screen** when running `./install.sh`. It installs as a Service that works in every app (it is not a Finder right-click action and has no Shortcuts-app version).
-2. Bind a hotkey: **System Settings → Keyboard → Keyboard Shortcuts → Services → General → Decode QR Code On Screen**. The hotkey survives reinstalls.
+2. Bind a hotkey: **System Settings → Keyboard → Keyboard Shortcuts → Services → General → Decode QR Code On Screen**. The installer never touches this binding, so reinstalling does not reset it.
 3. The first time you use it, grant **Screen Recording** permission when System Settings opens, then try again.
 
 ### Troubleshooting: "Screen Recording permission needed"

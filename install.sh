@@ -85,10 +85,12 @@ _need_elevenlabs=false
 _need_huggingface=false
 _need_voice=false
 _need_qr=false
+_has_no_input_service=false
 
 for num in "${QA_SELECTED[@]}"; do
     idx=$((num - 1))
     [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
+    [[ "$(workflow_input_type "${QA_PATHS[$idx]}")" == "$NO_INPUT_TYPE" ]] && _has_no_input_service=true
     case "${QA_NAMES[$idx]}" in
         "Convert PDF to MD.workflow")
             _need_llm=true ;;
@@ -309,7 +311,7 @@ fi
 
 # --- Install as Finder Services ---
 # No-input services cannot be Shortcuts, so they install here even in Shortcuts-only mode.
-if [[ "$_install_services" == "true" || "$_need_qr" == "true" ]]; then
+if [[ "$_install_services" == "true" || "$_has_no_input_service" == "true" ]]; then
     mkdir -p "$SERVICES_DIR"
     _need_finder_restart=false
     for num in "${QA_SELECTED[@]}"; do
@@ -345,6 +347,7 @@ fi
 # --- Install as Shortcuts App ---
 if [[ "$_install_shortcuts" == "true" ]]; then
     SHORTCUTS_TMP=$(mktemp -d)
+    _shortcuts_opened=0
     for num in "${QA_SELECTED[@]}"; do
         idx=$((num - 1))
         [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
@@ -439,20 +442,23 @@ SHORTCUT_EOF
             -o "$SHORTCUTS_TMP/$wf_name.shortcut" 2>/dev/null; then
             echo -e "${BLUE}Installing:${NC} Shortcut -> $wf_name"
             open "$SHORTCUTS_TMP/$wf_name.shortcut"
+            _shortcuts_opened=$((_shortcuts_opened + 1))
             sleep 3
         else
             echo -e "${YELLOW}Warning:${NC} Failed to sign shortcut: $wf_name"
         fi
     done
-    echo ""
-    echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
-    echo ""
-    echo "Next steps after adding all shortcuts:"
-    echo "  1. Shortcuts app -> Settings (Cmd+,) -> Advanced -> check 'Allow Running Scripts'"
-    echo "  2. Restart your Mac (required for shortcuts to appear in Finder)"
-    echo "  3. Right-click any file -> Quick Actions -> Customize... -> toggle on what you want"
-    echo "     (macOS shows only relevant actions per file type, so enabling all is fine)"
-    sleep 5
+    if [[ $_shortcuts_opened -gt 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}Note:${NC} Click 'Add Shortcut' for each dialog in the Shortcuts app."
+        echo ""
+        echo "Next steps after adding all shortcuts:"
+        echo "  1. Shortcuts app -> Settings (Cmd+,) -> Advanced -> check 'Allow Running Scripts'"
+        echo "  2. Restart your Mac (required for shortcuts to appear in Finder)"
+        echo "  3. Right-click any file -> Quick Actions -> Customize... -> toggle on what you want"
+        echo "     (macOS shows only relevant actions per file type, so enabling all is fine)"
+        sleep 5
+    fi
     rm -rf "$SHORTCUTS_TMP"
 fi
 

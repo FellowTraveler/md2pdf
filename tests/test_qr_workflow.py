@@ -47,7 +47,12 @@ class QrWorkflowTests(unittest.TestCase):
                 "serviceInputTypeIdentifier"
             ] == NO_INPUT_TYPE
         ]
-        self.assertEqual(no_input_workflows, [f"{WORKFLOW_NAME}.workflow"])
+        self.assertEqual(
+            no_input_workflows,
+            [f"{WORKFLOW_NAME}.workflow"],
+            "The set of no-input workflows changed. install.sh treats these specially "
+            "(no pbs write, no Shortcut, always a Service) — re-check those paths.",
+        )
 
 
 if __name__ == "__main__":
