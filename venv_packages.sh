@@ -24,5 +24,6 @@ venv_packages() {  # venv_packages ENV_FILE — prints the package list
     if [[ "$_need_elevenlabs" == "true" ]] && has_saved_key ELEVENLABS_API_KEY "$env_file"; then
         packages="$packages elevenlabs"
     fi
+    [[ "$_need_qr" == "true" ]] && packages="$packages zxing-cpp"  # no key needed
     echo "$packages"
 }

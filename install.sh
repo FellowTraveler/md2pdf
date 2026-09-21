@@ -8,6 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_BIN="${HOME}/bin"
 THEME_DIR="${HOME}/.md2pdf-themes"
+# Automator input type of services that take no input (run from any app via hotkey)
+NO_INPUT_TYPE="com.apple.Automator.nothing"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -25,6 +27,11 @@ if [[ -f "$INSTALL_BIN/md2pdf" || -d "${HOME}/Library/Services/Convert MD to PDF
     bash "$SCRIPT_DIR/uninstall.sh"
     echo ""
 fi
+
+workflow_input_type() {  # workflow_input_type /path/to/Some.workflow
+    /usr/libexec/PlistBuddy -c "Print :workflowMetaData:serviceInputTypeIdentifier" \
+        "$1/Contents/document.wflow" 2>/dev/null || true
+}
 
 # ── Phase 1: Quick Action selection ─────────────────────────────────────────
 
@@ -53,6 +60,7 @@ for workflow in "$SCRIPT_DIR/"*.workflow; do
     wf_display="$(basename "$workflow" .workflow)"
     already=""
     [[ -d "$SERVICES_DIR/$(basename "$workflow")" ]] && already=" (already installed)"
+    [[ "$(workflow_input_type "$workflow")" == "$NO_INPUT_TYPE" ]] && wf_display="$wf_display [any app — hotkey]"
     printf "  %2d) %s%s\n" "$i" "$wf_display" "$already"
     QA_NAMES+=("$(basename "$workflow")")
     QA_PATHS+=("$workflow")
@@ -76,6 +84,7 @@ _need_llm=false
 _need_elevenlabs=false
 _need_huggingface=false
 _need_voice=false
+_need_qr=false
 
 for num in "${QA_SELECTED[@]}"; do
     idx=$((num - 1))
@@ -87,6 +96,8 @@ for num in "${QA_SELECTED[@]}"; do
             _need_llm=true; _need_elevenlabs=true; _need_voice=true ;;
         "Transcribe Audio to MD.workflow")
             _need_elevenlabs=true; _need_huggingface=true ;;
+        "Decode QR Code On Screen.workflow")
+            _need_qr=true ;;
     esac
 done
 
@@ -253,7 +264,7 @@ if [[ ! -d "$INSTALL_BIN" ]]; then
     mkdir -p "$INSTALL_BIN"
 fi
 
-for script in md2pdf pdf2md audio2md md2audio; do
+for script in md2pdf pdf2md audio2md md2audio qr2clip; do
     echo -e "${BLUE}Installing:${NC} $script -> $INSTALL_BIN/$script"
     cp "$SCRIPT_DIR/$script" "$INSTALL_BIN/$script"
     chmod +x "$INSTALL_BIN/$script"
@@ -297,7 +308,8 @@ if [[ ${#QA_SELECTED[@]} -gt 0 ]]; then
 fi
 
 # --- Install as Finder Services ---
-if [[ "$_install_services" == "true" ]]; then
+# No-input services cannot be Shortcuts, so they install here even in Shortcuts-only mode.
+if [[ "$_install_services" == "true" || "$_need_qr" == "true" ]]; then
     mkdir -p "$SERVICES_DIR"
     _need_finder_restart=false
     for num in "${QA_SELECTED[@]}"; do
@@ -305,11 +317,16 @@ if [[ "$_install_services" == "true" ]]; then
         [[ $idx -lt 0 || $idx -ge ${#QA_NAMES[@]} ]] && continue
         name="${QA_NAMES[$idx]}"
         workflow="${QA_PATHS[$idx]}"
+        input_type="$(workflow_input_type "$workflow")"
+        [[ "$_install_services" != "true" && "$input_type" != "$NO_INPUT_TYPE" ]] && continue
         echo -e "${BLUE}Installing:${NC} Finder Service -> $SERVICES_DIR/$name"
         rm -rf "$SERVICES_DIR/$name"
         cp -R "$workflow" "$SERVICES_DIR/$name"
         service_name=$(/usr/libexec/PlistBuddy -c "Print :NSServices:0:NSMenuItem:default" "$SERVICES_DIR/$name/Contents/Info.plist" 2>/dev/null)
-        if [[ -n "$service_name" ]]; then
+        # macOS keeps a service's hotkey (key_equivalent) in this same pbs entry, and
+        # -dict-add replaces the whole entry. No-input services don't need the
+        # context-menu flags, so leave their entry alone to preserve the hotkey.
+        if [[ -n "$service_name" && "$input_type" != "$NO_INPUT_TYPE" ]]; then
             pbs_key="(null) - ${service_name} - runWorkflowAsService"
             defaults write pbs NSServicesStatus -dict-add \
                 "\"$pbs_key\"" \
@@ -336,9 +353,12 @@ if [[ "$_install_shortcuts" == "true" ]]; then
 
         cmd=$(/usr/libexec/PlistBuddy -c "Print :actions:0:action:ActionParameters:COMMAND_STRING" \
             "$workflow/Contents/document.wflow" 2>/dev/null)
-        input_type=$(/usr/libexec/PlistBuddy -c "Print :workflowMetaData:serviceInputTypeIdentifier" \
-            "$workflow/Contents/document.wflow" 2>/dev/null)
+        input_type="$(workflow_input_type "$workflow")"
         [[ -z "$cmd" ]] && continue
+        if [[ "$input_type" == "$NO_INPUT_TYPE" ]]; then
+            echo -e "${YELLOW}Note:${NC} '$wf_name' takes no input — installed as a Service only."
+            continue
+        fi
 
         input_xml=""
         i=0
@@ -434,6 +454,14 @@ SHORTCUT_EOF
     echo "     (macOS shows only relevant actions per file type, so enabling all is fine)"
     sleep 5
     rm -rf "$SHORTCUTS_TMP"
+fi
+
+if [[ "$_need_qr" == "true" ]]; then
+    echo ""
+    echo -e "${BOLD}Decode QR Code On Screen${NC}"
+    echo "  1. Bind a hotkey: System Settings -> Keyboard -> Keyboard Shortcuts -> Services -> General"
+    echo "     (an existing hotkey for this service is preserved across reinstalls)"
+    echo "  2. On first use, grant Screen Recording permission when System Settings opens."
 fi
 
 echo ""

@@ -39,6 +39,9 @@ class VenvPackagesTest(unittest.TestCase):
         self.env_file.write_text("HUGGINGFACE_TOKEN=\n")
         self.assertEqual(self._packages(huggingface=True, elevenlabs=True, llm=True), BASE_PACKAGES)
 
+    def test_qr_feature_adds_zxing_without_any_key(self):
+        self.assertEqual(self._packages(qr=True), BASE_PACKAGES + ["zxing-cpp"])
+
     def test_llm_packages_follow_saved_keys(self):
         self.env_file.write_text("ANTHROPIC_API_KEY=sk_abc\nOPENAI_API_KEY=sk_def\n")
         packages = self._packages(llm=True)
