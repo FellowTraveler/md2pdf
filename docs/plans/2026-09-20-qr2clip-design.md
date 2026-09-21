@@ -1,0 +1,143 @@
+# Decode QR Code On Screen Design
+
+## Goal
+
+Add a "Decode QR Code On Screen" service to md2pdf. The user presses a global hotkey, drags a selection box around a QR code anywhere on screen, and the decoded payload is copied to the clipboard with a non-modal notification confirming success.
+
+This replaces a standalone one-off Automator workflow of the same name (`~/Library/Services/Decode QR Code On Screen.workflow`, bound to Cmd+Opt+Ctrl+9) so the capability is versioned, installed, updated, and removed by md2pdf's existing install system.
+
+## Decisions
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Decoder | `zxing-cpp` only | zbar fails on QR codes with a center logo; zxing handles them. No fallback (YAGNI, no Homebrew dependency). |
+| Payload handling | Always copy to clipboard; never open | User preference. Payload is opaque text; no URL sniffing. |
+| Confirmation | `osascript display notification` | Non-modal; same mechanism the other md2pdf tools use. |
+| Entry point | `~/bin` script + no-input Automator workflow | Matches every other md2pdf tool. Hotkey bound by the user in System Settings. |
+| Shortcuts-app version | Not generated | Shortcuts runs shell scripts in a sandboxed subprocess; a file-input Quick Action is meaningless for a no-input service. |
+| Workflow name | `Decode QR Code On Screen` (identical to the one-off) | The `pbs` key is identical, so the existing hotkey keeps working with no rebinding. |
+
+## Architecture
+
+**New files:**
+- `qr2clip` — Python script (polyglot shebang, runs in `~/.md2pdf-venv`), installed to `~/bin`
+- `Decode QR Code On Screen.workflow/` — Automator service taking no input, available in any application
+- `tests/test_qr2clip.py` — stdlib `unittest` tests
+- `tests/fixtures/qr_plain.png`, `tests/fixtures/qr_center_logo.png`, `tests/fixtures/no_qr.png`
+
+**Modified files:** `install.sh`, `uninstall.sh`, `README.md`
+
+**New dependency:** `zxing-cpp` (PyPI, imported as `zxingcpp`). `Pillow` is already in the venv.
+
+## `qr2clip` script
+
+**Usage:**
+- `qr2clip` — interactive: capture a screen selection, decode, copy to clipboard, notify
+- `qr2clip <image>` — decode an existing image file and print the payload to stdout (exit 1 if none found)
+
+**Functions (one responsibility each):**
+- `capture_selection(path) -> bool` — runs `/usr/sbin/screencapture -i <path>`; returns True if the file exists and is non-empty
+- `decode_qr(path) -> str | None` — `zxingcpp.read_barcodes(Image.open(path))`; returns the first result's `.text` or `None`
+- `has_screen_capture_access() -> bool` — calls `CGPreflightScreenCaptureAccess()` from the CoreGraphics framework via `ctypes` (passive check, never prompts)
+- `copy_to_clipboard(text)` — pipes text to `/usr/bin/pbcopy`
+- `notify(message)` — `osascript -e 'display notification ...'`
+- `scan_screen()` — the interactive flow below
+- `main()` — argument dispatch
+
+**Interactive flow:**
+
+```
+create temp .png path (tempfile)
+try:
+    if not capture_selection(tmp):
+        if has_screen_capture_access():  notify("Capture cancelled")
+        else:                            notify("Screen Recording permission needed")
+                                         open the Privacy > Screen Recording settings pane
+        return
+    payload = decode_qr(tmp)
+    if payload is None:                  notify("No QR code found in that selection")
+        return
+    copy_to_clipboard(payload)
+    notify("QR code copied: <preview>")
+finally:
+    delete tmp
+```
+
+**Behavior preserved from the reference script:**
+- An empty/missing capture file is a *capture* failure, reported separately from "no QR code found". The permission preflight further splits capture failure into "cancelled" vs "permission missing".
+- The temp file is removed on every path.
+
+**Constants** (top of file, no inline literals): notification title, preview length, `screencapture` / `pbcopy` / `osascript` paths, CoreGraphics framework path, Screen Recording settings-pane URL, and all user-facing messages.
+
+If several codes are in the selection, the first result is used.
+
+## Workflow
+
+`Decode QR Code On Screen.workflow`, modelled on the proven one-off rather than on the Finder workflows:
+
+- `Info.plist`: `NSServices[0]` contains only `NSMenuItem.default = "Decode QR Code On Screen"` and `NSMessage = runWorkflowAsService`. No `NSSendTypes`, no `NSRequiredContext`, no `ShortcutInputClasses`.
+- `document.wflow` metadata: `serviceInputTypeIdentifier = com.apple.Automator.nothing`, `serviceOutputTypeIdentifier = com.apple.Automator.nothing`, `workflowTypeIdentifier = com.apple.Automator.servicesMenu`, no `serviceApplicationBundleID`.
+- `COMMAND_STRING`, same shape as the other workflows:
+  ```
+  export PATH="$HOME/bin:/opt/homebrew/bin:$PATH"
+  qr2clip
+  ```
+
+## Install system integration
+
+The existing system already handles most of the lifecycle with no changes:
+
+| Lifecycle step | Existing mechanism | Change |
+|---|---|---|
+| Listed for selection | `install.sh` globs `*.workflow` | none |
+| Installed as a Service | `rm -rf` + `cp -R` into `~/Library/Services/` | none |
+| Updated | `install.sh` runs `uninstall.sh` first when an install is detected | none |
+| Removed | `uninstall.sh` globs `*.workflow` and removes matches from `~/Library/Services/` | none |
+| Script installed/removed | `for script in ...` loops in `install.sh` and `uninstall.sh` | add `qr2clip` to both |
+| Dependency gating | `case "${QA_NAMES[$idx]}"` sets `_need_*`; `_PKGS` built conditionally | add `_need_qr` arm; add `zxing-cpp` to `_PKGS` when set |
+
+**Two required fixes, both keyed on the workflow's own metadata (`serviceInputTypeIdentifier == com.apple.Automator.nothing`), not on its name:**
+
+1. **Do not overwrite the `pbs` entry for no-input services.** macOS stores a service's hotkey as `key_equivalent` in the same `pbs NSServicesStatus` entry that `install.sh` replaces via `defaults write ... -dict-add`. Writing `presentation_modes` there would erase the user's hotkey on every reinstall. That write exists to force file services into Finder's context menu; a no-input service does not need it (the one-off has no `presentation_modes` and works). The Services loop skips the `defaults write` for no-input workflows.
+2. **Do not generate a Shortcut for no-input services.** The Shortcuts loop would otherwise fall through to the file+folder input classes and produce a Finder Quick Action that makes no sense. The loop skips these workflows and prints a note that the action is available as a Service only.
+
+**Post-install note:** when `_need_qr` is set, `install.sh` prints how to bind a hotkey (System Settings → Keyboard → Keyboard Shortcuts → Services → General) and that Screen Recording permission is required on first use.
+
+**Migration:** because the name matches, installing replaces the one-off workflow in `~/Library/Services/`. `~/Library/Scripts/decode_qr.py` and the separate `Decode QR Code.workflow` are not touched.
+
+## Error handling
+
+- Capture file empty, permission granted → "Capture cancelled"
+- Capture file empty, permission missing → "Screen Recording permission needed" + open the settings pane
+- Capture non-empty, nothing decoded → "No QR code found in that selection"
+- `zxingcpp` import fails (workflow installed without the dependency) → notification telling the user to re-run `install.sh`
+- `qr2clip <image>` with a missing/unreadable file → message on stderr, exit 1
+
+## Testing
+
+`tests/test_qr2clip.py`, run with `~/.md2pdf-venv/bin/python3 -m unittest`. The script has no `.py` extension, so tests load it with `importlib.machinery.SourceFileLoader`.
+
+- `decode_qr` on `qr_plain.png` returns the expected text
+- `decode_qr` on `qr_center_logo.png` returns the expected text (regression guard for the zbar failure)
+- `decode_qr` on `no_qr.png` returns `None`
+- `scan_screen` with `capture_selection`, `has_screen_capture_access`, `copy_to_clipboard`, and `notify` mocked:
+  - empty capture + access granted → "Capture cancelled", clipboard untouched
+  - empty capture + access denied → permission message, clipboard untouched
+  - non-empty capture, no code → "No QR code found", clipboard untouched
+  - successful decode → clipboard receives the payload, success notification sent
+  - temp file is gone afterwards in all four cases
+
+Fixtures: the center-logo fixture is the real branded QR that zbar failed on if the user supplies it; otherwise generated (error-correction level H with a logo pasted over the center) using a dev-only generator that is not added to the install.
+
+**Manual verification (cannot be automated):** trigger the installed service by hotkey, confirm clipboard + notification, confirm the hotkey survives an uninstall/reinstall cycle, and record which process macOS lists under Screen Recording so the README wording is accurate.
+
+## README
+
+New "Decode QR Code On Screen" section: what it does, binding the hotkey, and the Screen Recording gotcha — the grant is a system-level TCC permission (`kTCCServiceScreenCapture`) needed by the process that invokes `screencapture`; a missing grant fails silently with an empty capture, and "System Audio Recording" is a different, adjacent permission that does not cover it.
+
+## Known limitations
+
+- macOS only
+- Only the first code in a selection is used
+- Not available as a Shortcuts-app Quick Action
+- The hotkey must be bound manually once; it persists across reinstalls
