@@ -15,6 +15,9 @@ Convert between Markdown and PDF. Includes `md2pdf` for themed PDF generation an
 - **pytesseract** and **Pillow** - Python bindings: `pip3 install pytesseract Pillow`
 - **anthropic** - AI cleanup of OCR output: `pip3 install anthropic`
 
+**Optional (for Decode QR Code On Screen):**
+- **zxing-cpp** - installed automatically into `~/.md2pdf-venv` when that action is selected; no Homebrew package needed
+
 ### Install
 
 ```bash
@@ -256,6 +259,36 @@ Or re-run `./install.sh` to configure interactively.
 
 Long Markdown files are automatically split into chunks and concatenated — no manual splitting needed. Requires `ffmpeg` (`brew install ffmpeg`).
 
+## Decode QR Code On Screen
+
+Press a hotkey, drag a box around a QR code anywhere on screen — a browser tab, a PDF, a photo — and the decoded text is copied to your clipboard. A notification confirms what was copied; nothing is opened automatically.
+
+Decoding uses [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), which reads QR codes that have a logo or image in the center (a style `zbar` often fails on).
+
+```bash
+qr2clip                # drag-select on screen -> clipboard
+qr2clip poster.png     # decode an image file -> stdout
+```
+
+### Setup
+
+1. Select **Decode QR Code On Screen** when running `./install.sh`. It installs as a Service that works in every app (it is not a Finder right-click action and has no Shortcuts-app version).
+2. Bind a hotkey: **System Settings → Keyboard → Keyboard Shortcuts → Services → General → Decode QR Code On Screen**. The hotkey survives reinstalls.
+3. The first time you use it, grant **Screen Recording** permission when System Settings opens, then try again.
+
+### Troubleshooting: "Screen Recording permission needed"
+
+Screen capture is gated by a system-level privacy permission (`kTCCServiceScreenCapture`). The process that launches the capture needs its own explicit grant under **System Settings → Privacy & Security → Screen Recording** — being an automation tool does not grant it. Without it, macOS shows no prompt and no error: the capture simply comes back empty. `qr2clip` detects this and tells you, rather than reporting "no QR code found".
+
+**System Audio Recording** is a separate, adjacent permission. Having it does not enable screen capture.
+
+| Notification | Meaning |
+|---|---|
+| QR code copied: … | Success — paste anywhere |
+| No QR code found in that selection | The capture worked, but no code could be read. Select the whole code with a little margin. |
+| Capture cancelled | You pressed Esc |
+| Screen Recording permission needed | The capture was blocked; grant the permission and retry |
+
 ## Finder Quick Actions
 
 The installer adds right-click context menu actions for macOS Finder:
@@ -271,6 +304,7 @@ The installer adds right-click context menu actions for macOS Finder:
 - **Open Folder with Windsurf** — Open a folder in Windsurf
 - **Open Folder with Fork** — Open a folder in Fork (git client)
 - **Create Audio Narration** — Right-click any `.md` file to generate an MP3 narration. Uses ElevenLabs TTS if an API key is configured, or macOS system voice as a local fallback.
+- **Decode QR Code On Screen** — Not a right-click action: a hotkey-driven Service available in any app. See [Decode QR Code On Screen](#decode-qr-code-on-screen).
 
 On older macOS, these appear under **Services** in the Finder right-click menu. On modern macOS (Sequoia+), the installer offers to install them as **Shortcuts**, which appear under **Quick Actions** in the right-click menu. You can selectively choose which actions to install.
 
