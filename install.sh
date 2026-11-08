@@ -185,7 +185,16 @@ if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}Warning: Node.js not found. md2pdf requires Node.js (https://nodejs.org/)${NC}"
 fi
 
-if command -v python3 &> /dev/null; then
+source "$SCRIPT_DIR/python_select.sh"
+VENV_PYTHON="$(find_venv_python || true)"
+if [[ -z "$VENV_PYTHON" ]] && command -v brew &> /dev/null; then
+    _PREFERRED_PYTHON="${PYTHON_VERSIONS%% *}"
+    echo -e "${BLUE}Installing:${NC} python@$_PREFERRED_PYTHON (Homebrew) for the Python tools"
+    brew install "python@$_PREFERRED_PYTHON"
+    VENV_PYTHON="$(find_venv_python || true)"
+fi
+
+if [[ -n "$VENV_PYTHON" ]]; then
     for pkg in pymupdf4llm pymupdf-layout pytesseract Pillow anthropic openai faster-whisper pyannote.audio elevenlabs; do
         if pip3 show "$pkg" &>/dev/null 2>&1; then
             echo -e "${YELLOW}Cleaning up:${NC} removing $pkg from system Python"
@@ -193,10 +202,12 @@ if command -v python3 &> /dev/null; then
         fi
     done
 
-    echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv"
-    python3 -m venv "$HOME/.md2pdf-venv"
+    echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv ($("$VENV_PYTHON" --version))"
+    "$VENV_PYTHON" -m venv --clear "$HOME/.md2pdf-venv"
 
-    _PKGS="pymupdf4llm pytesseract Pillow faster-whisper"
+    # av<19: faster-whisper 1.2.1 passes metadata_errors to av.open(), removed in av 19
+    # (fixed on faster-whisper master, unreleased). Drop the cap after its next release.
+    _PKGS="pymupdf4llm pytesseract Pillow faster-whisper av<19"
     [[ "$_LLM_PROVIDER" == "anthropic" && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS anthropic"
     [[ "$_LLM_PROVIDER" == "openai"    && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS openai"
     [[ -n "$_HF_TOKEN" ]] && _PKGS="$_PKGS pyannote.audio"
@@ -282,7 +293,7 @@ def vision_complete(image_bytes, media_type, prompt, max_tokens=2048):
 LLM_HELPER_EOF
 
 else
-    echo -e "${YELLOW}Warning: Python 3 not found. pdf2md and audio tools require Python 3.${NC}"
+    echo -e "${YELLOW}Warning: no supported Python ($PYTHON_VERSIONS) found. pdf2md and audio tools require one (brew install python@${PYTHON_VERSIONS%% *}).${NC}"
     echo ""
 fi
 
