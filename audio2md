@@ -14,6 +14,7 @@ from pathlib import Path
 SUPPORTED_AUDIO = {".aac", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".opus", ".wma", ".caf"}
 SUPPORTED_VIDEO = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts"}
 SUPPORTED = SUPPORTED_AUDIO | SUPPORTED_VIDEO
+PYANNOTE_SAMPLE_RATE = 16000  # native rate of pyannote's diarization models
 
 
 def load_env():
@@ -139,12 +140,18 @@ def transcribe_elevenlabs(path):
 
 
 def _run_pyannote(path, hf_token):
+    import torch
+    from faster_whisper import decode_audio
     from pyannote.audio import Pipeline
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
         token=hf_token,
     )
-    result = pipeline(str(path))
+    # Preload audio: pyannote's own decoder returns short chunks for compressed
+    # formats like .m4a ("resulted in 477888 samples instead of ... 480000").
+    samples = decode_audio(str(path), sampling_rate=PYANNOTE_SAMPLE_RATE)
+    waveform = torch.from_numpy(samples).unsqueeze(0)  # (channel, time)
+    result = pipeline({"waveform": waveform, "sample_rate": PYANNOTE_SAMPLE_RATE})
     return result.speaker_diarization if hasattr(result, "speaker_diarization") else result
 
 
