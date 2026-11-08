@@ -213,13 +213,8 @@ if [[ -n "$VENV_PYTHON" ]]; then
     echo -e "${BLUE}Setting up:${NC} Python venv at ~/.md2pdf-venv ($("$VENV_PYTHON" --version))"
     "$VENV_PYTHON" -m venv --clear "$HOME/.md2pdf-venv"
 
-    # av<19: faster-whisper 1.2.1 passes metadata_errors to av.open(), removed in av 19
-    # (fixed on faster-whisper master, unreleased). Drop the cap after its next release.
-    _PKGS="pymupdf4llm pytesseract Pillow faster-whisper av<19"
-    [[ "$_LLM_PROVIDER" == "anthropic" && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS anthropic"
-    [[ "$_LLM_PROVIDER" == "openai"    && -n "$_LLM_KEY" ]] && _PKGS="$_PKGS openai"
-    [[ -n "$_HF_TOKEN" ]] && _PKGS="$_PKGS pyannote.audio"
-    [[ -n "$_EL_KEY"   ]] && _PKGS="$_PKGS elevenlabs"
+    source "$SCRIPT_DIR/venv_packages.sh"
+    _PKGS="$(venv_packages "$HOME/.config/md2pdf/.env")"
 
     "$HOME/.md2pdf-venv/bin/pip" install --quiet --upgrade $_PKGS
     echo ""
