@@ -183,6 +183,14 @@ fi
 
 if ! command -v node &> /dev/null; then
     echo -e "${YELLOW}Warning: Node.js not found. md2pdf requires Node.js (https://nodejs.org/)${NC}"
+else
+    # Fresh install every time (uninstall removes it), so re-running install.sh pulls
+    # the latest patched versions of these tools AND their dependencies. `npx --yes`
+    # reused its first download forever, leaving users on vulnerable transitive deps.
+    echo -e "${BLUE}Setting up:${NC} md-to-pdf and mermaid-cli at ~/.md2pdf-node"
+    rm -rf "$HOME/.md2pdf-node"
+    npm install --prefix "$HOME/.md2pdf-node" --loglevel=error --no-fund \
+        md-to-pdf@latest @mermaid-js/mermaid-cli@latest
 fi
 
 source "$SCRIPT_DIR/python_select.sh"

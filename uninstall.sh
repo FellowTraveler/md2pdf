@@ -38,6 +38,12 @@ if [[ -d "$HOME/.md2pdf-venv" ]]; then
     rm -rf "$HOME/.md2pdf-venv"
 fi
 
+# Remove Node tools (md-to-pdf, mermaid-cli)
+if [[ -d "$HOME/.md2pdf-node" ]]; then
+    echo -e "${BLUE}Removing:${NC} ~/.md2pdf-node"
+    rm -rf "$HOME/.md2pdf-node"
+fi
+
 # Remove Automator workflows from Services
 for workflow in "$SCRIPT_DIR/"*.workflow; do
     [[ -d "$workflow" ]] || continue

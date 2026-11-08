@@ -13,6 +13,7 @@ set -e
 
 THEME_DIR="$HOME/.md2pdf-themes"
 DEFAULT_THEME="executive"
+NODE_TOOLS_BIN="$HOME/.md2pdf-node/node_modules/.bin"  # installed by install.sh
 
 # Colors for output
 RED='\033[0;31m'
@@ -121,6 +122,11 @@ if [[ ! -f "$THEME_FILE" ]]; then
     exit 1
 fi
 
+if [[ ! -x "$NODE_TOOLS_BIN/md-to-pdf" ]]; then
+    echo -e "${RED}Error: md-to-pdf not found in ~/.md2pdf-node — re-run md2pdf's install.sh${NC}"
+    exit 1
+fi
+
 # Generate output filename
 OUTPUT_FILE="${INPUT_FILE%.md}.pdf"
 
@@ -135,7 +141,7 @@ trap "rm -rf '$MERMAID_TMPDIR'" EXIT
 
 PROCESSED_FILE="$INPUT_FILE"
 OUTPUT_BASE="${OUTPUT_FILE%.pdf}"
-python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" "$OUTPUT_BASE" << 'MERMAID_PYEOF'
+python3 - "$INPUT_FILE" "$MERMAID_TMPDIR" "$OUTPUT_BASE" "$NODE_TOOLS_BIN/mmdc" << 'MERMAID_PYEOF'
 import sys
 import re
 import os
@@ -145,6 +151,7 @@ import subprocess
 input_file = sys.argv[1]
 tmpdir = sys.argv[2]
 output_base = sys.argv[3]
+mmdc = sys.argv[4]
 
 with open(input_file, "r", encoding="utf-8") as f:
     content = f.read()
@@ -164,8 +171,7 @@ def render_block(match):
     with open(mmd_file, "w") as f:
         f.write(diagram_source)
     result = subprocess.run(
-        ["npx", "--yes", "@mermaid-js/mermaid-cli",
-         "-i", mmd_file, "-o", png_file, "--quiet"],
+        [mmdc, "-i", mmd_file, "-o", png_file, "--quiet"],
         capture_output=True, text=True
     )
     if result.returncode != 0 or not os.path.exists(png_file):
@@ -195,7 +201,7 @@ if [[ -f "$MERMAID_TMPDIR/processed_path.txt" ]]; then
 fi
 
 # Run md-to-pdf
-npx --yes md-to-pdf "$PROCESSED_FILE" \
+"$NODE_TOOLS_BIN/md-to-pdf" "$PROCESSED_FILE" \
     --stylesheet "$THEME_FILE" \
     --pdf-options '{"format": "Letter", "margin": {"top": "0mm", "bottom": "0mm", "left": "0mm", "right": "0mm"}, "printBackground": true}' \
     2>&1 | grep -v "^$"

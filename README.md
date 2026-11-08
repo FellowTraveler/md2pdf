@@ -102,7 +102,7 @@ graph TD
 ```
 ````
 
-Requires `npx` (bundled with Node.js). The `@mermaid-js/mermaid-cli` package is downloaded automatically on first use via `npx`.
+Requires Node.js. `install.sh` installs `md-to-pdf` and `@mermaid-js/mermaid-cli` into `~/.md2pdf-node`, fetching the latest versions on every run — re-run `./install.sh` periodically to pick up security patches.
 
 ## Themes
 
