@@ -69,7 +69,7 @@ for f in "$@"; do
         osascript -e "display notification \"Converting ${pages}-page PDF. This may take a few minutes...\" with title \"PDF to MD\" sound name \"Submarine\""
         pdf2md "$f" 2&gt;&amp;1
         if [ -s "$output" ]; then
-            osascript -e "display notification \"Markdown saved: $(basename "$output")\" with title \"PDF to MD\" sound name \"Glass\""
+            osascript -e 'on run argv' -e 'display notification ("Markdown saved: " &amp; item 1 of argv) with title "PDF to MD" sound name "Glass"' -e 'end run' "$(basename "$output")"
             open -R "$output"
         else
             osascript -e "display notification \"Conversion failed\" with title \"PDF to MD\" sound name \"Basso\""

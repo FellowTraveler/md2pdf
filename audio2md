@@ -7,6 +7,7 @@ exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
 import datetime
 import os
 import pathlib
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,6 +16,22 @@ SUPPORTED_AUDIO = {".aac", ".mp3", ".m4a", ".wav", ".ogg", ".flac", ".opus", ".w
 SUPPORTED_VIDEO = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".wmv", ".flv", ".ts", ".mts"}
 SUPPORTED = SUPPORTED_AUDIO | SUPPORTED_VIDEO
 PYANNOTE_SAMPLE_RATE = 16000  # native rate of pyannote's diarization models
+
+# AppleScript receives text via argv, never spliced into the script source:
+# a crafted filename would otherwise run arbitrary code (do shell script).
+NOTIFY_SCRIPT = "on run argv\ndisplay notification (item 1 of argv) with title (item 2 of argv)\nend run"
+ERROR_DIALOG_SCRIPT = (
+    "on run argv\ndisplay dialog (item 1 of argv) with title (item 2 of argv) "
+    'buttons {"OK"} default button "OK" with icon stop\nend run'
+)
+
+
+def notify(title, message):
+    subprocess.run(["osascript", "-e", NOTIFY_SCRIPT, message, title], check=False)
+
+
+def error_dialog(title, message):
+    subprocess.run(["osascript", "-e", ERROR_DIALOG_SCRIPT, message, title], check=False)
 
 
 def load_env():
@@ -208,11 +225,9 @@ def extract_audio(video_path):
 def process_file(path):
     p = Path(path)
     if p.suffix.lower() not in SUPPORTED:
-        os.system(
-            f"osascript -e 'display dialog \"{p.name} is not a supported file.\\n\\n"
-            f"Supported formats: {', '.join(sorted(SUPPORTED))}\" "
-            f"with title \"Transcribe to MD\" buttons {{\"OK\"}} "
-            f"default button \"OK\" with icon stop'"
+        error_dialog(
+            "Transcribe to MD",
+            f"{p.name} is not a supported file.\n\nSupported formats: {', '.join(sorted(SUPPORTED))}",
         )
         return
 
@@ -267,7 +282,7 @@ def process_file(path):
         error_md = f"# Transcription Failed: {p.name}\n\n**Date:** {datetime.date.today().isoformat()}\n\n**Error:**\n\n```\n{msg}\n```\n"
         out_path.write_text(error_md, encoding="utf-8")
         print(f"Error transcribing {p.name}: {msg}", file=sys.stderr)
-        os.system(f'osascript -e \'display notification "See {out_path.name} for details" with title "Transcription Failed"\'')
+        notify("Transcription Failed", f"See {out_path.name} for details")
         if audio_path:
             audio_path.unlink(missing_ok=True)
         sys.exit(1)
@@ -275,7 +290,7 @@ def process_file(path):
     if audio_path:
         audio_path.unlink(missing_ok=True)
     out_path.write_text(md, encoding="utf-8")
-    os.system(f'osascript -e \'display notification "Saved: {out_path.name}" with title "Transcription Complete"\'')
+    notify("Transcription Complete", f"Saved: {out_path.name}")
     print(f"Saved: {out_path}", file=sys.stderr)
 
 

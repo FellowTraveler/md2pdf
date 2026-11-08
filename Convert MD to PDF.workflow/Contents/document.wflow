@@ -65,7 +65,7 @@ for f in "$@"; do
     if [[ "$f" == *.md ]]; then
         md2pdf "$f" 2>/tmp/md2pdf-error.log
         if [ $? -eq 0 ]; then
-            osascript -e "display notification \"PDF saved: $(basename "${f%.md}.pdf")\" with title \"MD to PDF\""
+            osascript -e 'on run argv' -e 'display notification ("PDF saved: " &amp; item 1 of argv) with title "MD to PDF"' -e 'end run' "$(basename "${f%.md}.pdf")"
         else
             osascript -e "display notification \"Failed — see /tmp/md2pdf-error.log\" with title \"MD to PDF Error\""
         fi
