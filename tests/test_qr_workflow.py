@@ -55,5 +55,42 @@ class QrWorkflowTests(unittest.TestCase):
         )
 
 
+IMAGE_WORKFLOW_NAME = "Decode QR Code in Image"
+IMAGE_INPUT_TYPE = "com.apple.Automator.fileSystemObject.image"
+
+
+class QrImageWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        self.workflow_dir = REPO_ROOT / f"{IMAGE_WORKFLOW_NAME}.workflow"
+
+    def test_service_is_offered_only_for_image_files_in_finder(self):
+        info = load_plist(self.workflow_dir, "Info.plist")
+        service = info["NSServices"][0]
+        self.assertEqual(service["NSMenuItem"]["default"], IMAGE_WORKFLOW_NAME)
+        self.assertEqual(service["NSSendFileTypes"], ["public.image"])
+        self.assertEqual(service["NSRequiredContext"]["NSApplicationIdentifier"], "com.apple.finder")
+        self.assertEqual(info["ShortcutInputClasses"], ["WFImageContentItem"])
+        metadata = load_plist(self.workflow_dir, "document.wflow")["workflowMetaData"]
+        self.assertEqual(metadata["serviceInputTypeIdentifier"], IMAGE_INPUT_TYPE)
+
+    def test_workflow_copies_each_image_with_quoted_paths(self):
+        document = load_plist(self.workflow_dir, "document.wflow")
+        command = document["actions"][0]["action"]["ActionParameters"]["COMMAND_STRING"]
+        self.assertIn('for f in "$@"; do', command)
+        self.assertIn('qr2clip --copy "$f"', command)
+        self.assertNotIn("open ", command)
+
+    def test_shortcut_pipes_the_image_on_stdin(self):
+        """Shortcuts' script sandbox can't read Downloads/Desktop paths, so the
+        Shortcut must receive the image bytes the way Copy File Contents does."""
+        install_script = (REPO_ROOT / "install.sh").read_text()
+        self.assertIn(
+            f'"{IMAGE_WORKFLOW_NAME}")\n'
+            "                shortcut_script='\"$HOME/bin/qr2clip\" --copy -'\n"
+            '                shortcut_input_mode="to stdin" ;;',
+            install_script,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

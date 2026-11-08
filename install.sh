@@ -98,7 +98,7 @@ for num in "${QA_SELECTED[@]}"; do
             _need_llm=true; _need_elevenlabs=true; _need_voice=true ;;
         "Transcribe Audio to MD.workflow")
             _need_elevenlabs=true; _need_huggingface=true ;;
-        "Decode QR Code On Screen.workflow")
+        "Decode QR Code On Screen.workflow"|"Decode QR Code in Image.workflow")
             _need_qr=true ;;
     esac
 done
@@ -386,13 +386,18 @@ if [[ "$_install_shortcuts" == "true" ]]; then
         # passes them via Quick Actions. "Copy File Contents" must use stdin mode so
         # shortcuts.app reads the file itself (using its Finder-granted permission)
         # and pipes the content to the script, bypassing the sandbox restriction.
-        if [[ "$wf_name" == "Copy File Contents" ]]; then
-            shortcut_script="cat | pbcopy"
-            shortcut_input_mode="to stdin"
-        else
-            shortcut_script=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
-            shortcut_input_mode="as arguments"
-        fi
+        # "Decode QR Code in Image" does the same: qr2clip reads the image from stdin.
+        case "$wf_name" in
+            "Copy File Contents")
+                shortcut_script="cat | pbcopy"
+                shortcut_input_mode="to stdin" ;;
+            "Decode QR Code in Image")
+                shortcut_script='"$HOME/bin/qr2clip" --copy -'
+                shortcut_input_mode="to stdin" ;;
+            *)
+                shortcut_script=$(printf '%s' "$cmd" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+                shortcut_input_mode="as arguments" ;;
+        esac
         cat > "$SHORTCUTS_TMP/shortcut.plist" << SHORTCUT_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

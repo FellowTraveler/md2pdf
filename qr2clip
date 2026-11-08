@@ -7,6 +7,7 @@ exec "$HOME/.md2pdf-venv/bin/python3" "$0" "$@"
 import contextlib
 import ctypes
 import importlib.util
+import io
 import os
 import subprocess
 import sys
@@ -18,6 +19,9 @@ CAPTURE_SUFFIX = ".png"
 DECODER_MODULE = "zxingcpp"
 # pbcopy picks its text encoding from the locale, and Automator runs us with none set.
 CLIPBOARD_LOCALE = "UTF-8"
+COPY_FLAG = "--copy"
+# Shortcuts can't read files in Downloads/Desktop from a script, so it pipes the image in.
+STDIN_SOURCE = "-"
 
 SCREENCAPTURE_BIN = "/usr/sbin/screencapture"
 PBCOPY_BIN = "/usr/bin/pbcopy"
@@ -37,6 +41,8 @@ NOTIFY_APPLESCRIPT = (
 MSG_CANCELLED = "Capture cancelled"
 MSG_PERMISSION = "Screen Recording permission needed — opening System Settings"
 MSG_NOT_FOUND = "No QR code found in that selection"
+MSG_NOT_FOUND_IN_IMAGE = "No QR code found in that image"
+MSG_UNREADABLE_IMAGE = "Couldn't read that image"
 MSG_COPIED = "QR code copied: {preview}"
 MSG_MISSING_DECODER = "zxing-cpp is not installed — re-run md2pdf's install.sh"
 MSG_FAILED = "QR scan failed: {error}"
@@ -44,7 +50,9 @@ MSG_NO_SUCH_FILE = "qr2clip: no such file: {path}"
 MSG_CANNOT_READ_IMAGE = "qr2clip: cannot read image: {path}"
 USAGE = """Usage:
   qr2clip            Drag-select a QR code on screen; the payload is copied to the clipboard
-  qr2clip <image>    Decode a QR code from an image file and print the payload"""
+  qr2clip <image>    Decode a QR code from an image file and print the payload
+  qr2clip --copy <image|->
+                     Decode an image file (or image bytes on stdin) and copy the payload"""
 
 
 def notify(message):
@@ -119,6 +127,31 @@ def decode_file(image_path):
     return 0
 
 
+def copy_from_image(source):
+    """Right-click mode: decode an image file (or stdin bytes when source is "-"), copy
+    the payload and notify. The payload is never opened. Notified outcomes return 0,
+    as in scan_screen, so Automator shows no modal error dialog."""
+    if not decoder_available():
+        notify(MSG_MISSING_DECODER)
+        return 0
+    image = io.BytesIO(sys.stdin.buffer.read()) if source == STDIN_SOURCE else source
+    try:
+        payload = decode_qr(image)
+    except OSError:  # missing file, or PIL.UnidentifiedImageError
+        notify(MSG_UNREADABLE_IMAGE)
+        return 0
+    if payload is None:
+        notify(MSG_NOT_FOUND_IN_IMAGE)
+        return 0
+    try:
+        copy_to_clipboard(payload)
+    except Exception as error:
+        notify(MSG_FAILED.format(error=error))
+        raise
+    notify(MSG_COPIED.format(preview=preview_of(payload)))
+    return 0
+
+
 def report_empty_capture():
     """An empty capture is a capture failure, never "no QR code found"."""
     if has_screen_capture_access():
@@ -159,6 +192,8 @@ def main():
     arguments = sys.argv[1:]
     if not arguments:
         return scan_screen()
+    if len(arguments) == 2 and arguments[0] == COPY_FLAG:
+        return copy_from_image(arguments[1])
     if len(arguments) == 1 and arguments[0] not in ("-h", "--help"):
         return decode_file(arguments[0])
     print(USAGE)

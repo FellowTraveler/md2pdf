@@ -268,7 +268,10 @@ Decoding uses [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp), which reads Q
 ```bash
 qr2clip                # drag-select on screen -> clipboard
 qr2clip poster.png     # decode an image file -> stdout
+qr2clip --copy poster.png   # decode an image file -> clipboard + notification
 ```
+
+For QR codes saved as image files, right-click the file in Finder and choose **Decode QR Code in Image** (under Quick Actions or Services). It copies the decoded text the same way and never opens it — a QR code can point anywhere.
 
 ### Setup
 

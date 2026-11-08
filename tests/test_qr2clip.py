@@ -224,6 +224,60 @@ class SideEffectCommandTests(unittest.TestCase):
             self.assertTrue(qr2clip.capture_selection(captured))
 
 
+class CopyFromImageTests(unittest.TestCase):
+    """Right-click mode: every notified outcome exits 0, and the payload is only copied."""
+
+    def setUp(self):
+        self.notify = self.patch("notify")
+        self.copy_to_clipboard = self.patch("copy_to_clipboard")
+        self.patch("decoder_available", return_value=True)
+        self.run_process = self.patch_subprocess_run()
+
+    def patch(self, function_name, **kwargs):
+        patcher = mock.patch.object(qr2clip, function_name, **kwargs)
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def patch_subprocess_run(self):
+        patcher = mock.patch.object(qr2clip.subprocess, "run")
+        self.addCleanup(patcher.stop)
+        return patcher.start()
+
+    def assert_copied(self, text):
+        self.copy_to_clipboard.assert_called_once_with(text)
+        self.notify.assert_called_once_with(qr2clip.MSG_COPIED.format(preview=text))
+        self.run_process.assert_not_called()  # never `open`s the payload
+
+    def test_image_file_payload_is_copied(self):
+        self.assertEqual(qr2clip.copy_from_image(str(FIXTURES_DIR / "qr_center_logo.jpg")), 0)
+        self.assert_copied(CENTER_LOGO_QR_TEXT)
+
+    def test_image_bytes_on_stdin_are_decoded(self):
+        image_bytes = (FIXTURES_DIR / "qr_plain.png").read_bytes()
+        stdin = mock.Mock(buffer=io.BytesIO(image_bytes))
+        with mock.patch.object(qr2clip.sys, "stdin", stdin):
+            self.assertEqual(qr2clip.copy_from_image(qr2clip.STDIN_SOURCE), 0)
+        self.assert_copied(PLAIN_QR_TEXT)
+
+    def test_image_without_qr_reports_not_found(self):
+        self.assertEqual(qr2clip.copy_from_image(str(FIXTURES_DIR / "no_qr.png")), 0)
+        self.notify.assert_called_once_with(qr2clip.MSG_NOT_FOUND_IN_IMAGE)
+        self.copy_to_clipboard.assert_not_called()
+
+    def test_unreadable_or_missing_image_is_reported(self):
+        for path in (str(FIXTURES_DIR / "make_fixtures.py"), "/nonexistent/qr.png"):
+            self.notify.reset_mock()
+            self.assertEqual(qr2clip.copy_from_image(path), 0)
+            self.notify.assert_called_once_with(qr2clip.MSG_UNREADABLE_IMAGE)
+        self.copy_to_clipboard.assert_not_called()
+
+    def test_missing_decoder_is_reported(self):
+        self.patch("decoder_available", return_value=False)
+        self.assertEqual(qr2clip.copy_from_image(str(FIXTURES_DIR / "qr_plain.png")), 0)
+        self.notify.assert_called_once_with(qr2clip.MSG_MISSING_DECODER)
+        self.copy_to_clipboard.assert_not_called()
+
+
 class MainDispatchTests(unittest.TestCase):
     def run_main(self, *arguments):
         with mock.patch.object(sys, "argv", ["qr2clip", *arguments]), \
@@ -241,6 +295,14 @@ class MainDispatchTests(unittest.TestCase):
         _, scan, decode = self.run_main("poster.png")
         decode.assert_called_once_with("poster.png")
         scan.assert_not_called()
+
+    def test_copy_flag_copies_from_that_image(self):
+        with mock.patch.object(qr2clip, "copy_from_image", return_value=0) as copy_from_image:
+            exit_code, scan, decode = self.run_main(qr2clip.COPY_FLAG, "poster.png")
+        self.assertEqual(exit_code, 0)
+        copy_from_image.assert_called_once_with("poster.png")
+        scan.assert_not_called()
+        decode.assert_not_called()
 
     def test_help_and_bad_usage(self):
         self.assertEqual(self.run_main("--help")[0], 0)
