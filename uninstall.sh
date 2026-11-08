@@ -44,10 +44,17 @@ if [[ -d "$HOME/.md2pdf-node" ]]; then
     rm -rf "$HOME/.md2pdf-node"
 fi
 
-# Remove Automator workflows from Services
+# Actions renamed or removed from the repo; their old installs are cleaned up too.
+RETIRED_WORKFLOW_NAMES=("Open Folder with Windsurf")
+
+WORKFLOW_NAMES=("${RETIRED_WORKFLOW_NAMES[@]}")
 for workflow in "$SCRIPT_DIR/"*.workflow; do
-    [[ -d "$workflow" ]] || continue
-    name="$(basename "$workflow")"
+    [[ -d "$workflow" ]] && WORKFLOW_NAMES+=("$(basename "$workflow" .workflow)")
+done
+
+# Remove Automator workflows from Services
+for wf_name in "${WORKFLOW_NAMES[@]}"; do
+    name="$wf_name.workflow"
     if [[ -d "$SERVICES_DIR/$name" ]]; then
         echo -e "${BLUE}Removing:${NC} $SERVICES_DIR/$name"
         rm -rf "$SERVICES_DIR/$name"
@@ -67,9 +74,7 @@ echo ""
 if command -v shortcuts &> /dev/null; then
     remaining=""
     while IFS= read -r sc; do
-        for workflow in "$SCRIPT_DIR/"*.workflow; do
-            [[ -d "$workflow" ]] || continue
-            wf_name="$(basename "$workflow" .workflow)"
+        for wf_name in "${WORKFLOW_NAMES[@]}"; do
             if [[ "$sc" == "$wf_name" ]]; then
                 remaining="${remaining}  - ${sc}\n"
             fi

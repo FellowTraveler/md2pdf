@@ -59,9 +59,15 @@
 				<key>ActionParameters</key>
 				<dict>
 					<key>COMMAND_STRING</key>
-					<string>for f in "$@"
+					<string># Devin is the renamed Windsurf (same app, bundle id com.exafunction.windsurf): its
+# launcher is now devin-desktop; the windsurf paths cover pre-rename installs.
+for f in "$@"
 do
     for candidate in \
+        /usr/local/bin/devin-desktop \
+        /opt/homebrew/bin/devin-desktop \
+        "$HOME/.codeium/windsurf/bin/devin-desktop" \
+        "/Applications/Devin.app/Contents/Resources/app/bin/devin-desktop" \
         /usr/local/bin/windsurf \
         /opt/homebrew/bin/windsurf \
         "$HOME/.codeium/windsurf/bin/windsurf" \

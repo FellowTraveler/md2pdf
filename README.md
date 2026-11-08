@@ -304,7 +304,7 @@ The installer adds right-click context menu actions for macOS Finder:
 - **New Text File Next To This...** — Right-click any file or folder to create a new text file next to it
 - **Open Folder with VS Code** — Open a folder in Visual Studio Code
 - **Open Folder with Cursor** — Open a folder in Cursor
-- **Open Folder with Windsurf** — Open a folder in Windsurf
+- **Open Folder with Devin** — Open a folder in Devin (formerly Windsurf)
 - **Open Folder with Fork** — Open a folder in Fork (git client)
 - **Create Audio Narration** — Right-click any `.md` file to generate an MP3 narration. Uses ElevenLabs TTS if an API key is configured, or macOS system voice as a local fallback.
 - **Decode QR Code On Screen** — Not a right-click action: a hotkey-driven Service available in any app. See [Decode QR Code On Screen](#decode-qr-code-on-screen).
